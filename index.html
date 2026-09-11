@@ -929,6 +929,188 @@ function parseQuick(text){
   if(rest) rest = rest.charAt(0).toUpperCase() + rest.slice(1);
   return {qty, unit, name:rest};
 }
+
+/* ------------------------------ import ------------------------------
+   Une recette qui vient d'ailleurs : collée depuis une conversation,
+   copiée sur un site, ou reçue par un lien « #r= » (la recette voyage
+   dans le fragment, elle ne part donc jamais vers un serveur).
+   Texte libre, JSON ou lien passent par le même entonnoir : on devine
+   une fiche, on l'ouvre dans le formulaire, et rien n'est enregistré
+   avant relecture.
+--------------------------------------------------------------------- */
+function b64urlTo(s){
+  const b = String(s).replace(/-/g,"+").replace(/_/g,"/");
+  const bin = atob(b + "=".repeat((4 - b.length % 4) % 4));
+  const bytes = new Uint8Array(bin.length);
+  for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+const firstOf = (o, keys) => { for(const k of keys){ if(o && o[k] != null && o[k] !== "") return o[k]; } return null; };
+const stripPuce = s => String(s == null ? "" : s)
+  .replace(/^\s*(?:[-–—*•·▪◦]+|\d+\s*[.)])\s+/, "").replace(/\*\*/g, "").replace(/^#+\s*/, "").trim();
+
+function minutesOf(v){
+  if(v == null || v === "") return null;
+  if(typeof v === "number") return Math.round(v) || null;
+  const s = String(v).toLowerCase();
+  const iso = s.match(/^pt(?:(\d+)h)?(?:(\d+)m)?$/);
+  if(iso) return (parseInt(iso[1] || 0, 10)*60 + parseInt(iso[2] || 0, 10)) || null;
+  const h = s.match(/(\d+)\s*(?:h\b|heures?)\s*(\d+)?/);
+  if(h) return parseInt(h[1],10)*60 + (h[2] ? parseInt(h[2],10) : 0);
+  const m = s.match(/(\d+)/);
+  return m ? parseInt(m[1],10) : null;
+}
+function intOf(v){
+  if(v == null || v === "") return null;
+  const m = String(v).match(/\d+/);
+  return m ? parseInt(m[0],10) : null;
+}
+/* « 200 g de farine » : parseQuick laisse le « de » devant le nom. */
+function ingName(s){
+  const n = String(s == null ? "" : s).trim()
+    .replace(/^(?:de\s+la\s+|de\s+l['’]\s*|du\s+|des\s+|de\s+|d['’]\s*)/i, "").trim();
+  return n ? n.charAt(0).toUpperCase() + n.slice(1) : "";
+}
+function ingredientOf(raw){
+  if(typeof raw === "string"){
+    const p = parseQuick(stripPuce(raw));
+    const name = ingName(p.name);
+    if(!name) return null;
+    return {name, qty:p.qty, unit:p.unit || "", rayon:guessRayon(name)};
+  }
+  if(!raw || typeof raw !== "object") return null;
+  const name = ingName(firstOf(raw, ["name","nom","ingredient","ingrédient","label","item"]));
+  if(!name) return null;
+  let qty = firstOf(raw, ["qty","quantity","quantite","quantité","qte","amount"]);
+  if(typeof qty === "string") qty = parseFloat(qty.replace(",","."));
+  if(qty == null || isNaN(qty)) qty = null;
+  const unit = String(firstOf(raw, ["unit","unite","unité","mesure"]) || "").trim();
+  const key = raw.rayon ? String(raw.rayon).trim() : "";
+  return {name, qty, unit, rayon:(key && rayonMap().has(key)) ? key : guessRayon(name)};
+}
+
+const CAT_MOTS = [
+  [/dessert|g[âa]teau|tarte aux|crumble|mousse au|clafoutis|cookies?|biscuits?|glace|sorbet|compote|tiramisu|brownie|madeleine|cr[èe]me br[ûu]l/i, "Dessert"],
+  [/ap[ée]ro|verrine|tapas|toasts?|cake sal[ée]|dips?/i, "Apéro"],
+  [/soupe|velout[ée]|potage|gaspacho|entr[ée]e/i, "Entrée"],
+  [/petit[- ]d[ée]j|pancakes?|granola|porridge|brioche|confiture/i, "Petit-déj"],
+  [/pur[ée]e|gratin dauphinois|riz pilaf|accompagnement/i, "Accompagnement"]
+];
+function categoryOf(texte){
+  for(const [re, cat] of CAT_MOTS) if(re.test(texte || "")) return cat;
+  return "Plat";
+}
+
+function recipeOf(o){
+  if(!o || typeof o !== "object") return null;
+  const name = String(firstOf(o, ["name","nom","titre","title"]) || "").trim();
+  let ings = firstOf(o, ["ingredients","ingrédients","ingredient"]) || [];
+  if(!Array.isArray(ings)) ings = String(ings).split("\n");
+  const ingredients = ings.map(ingredientOf).filter(Boolean);
+  let steps = firstOf(o, ["steps","etapes","étapes","preparation","préparation","instructions","directions"]) || [];
+  if(!Array.isArray(steps)) steps = String(steps).split("\n");
+  steps = steps.map(stripPuce).filter(Boolean);
+  if(!name && !ingredients.length) return null;
+  const cat = String(firstOf(o, ["category","categorie","catégorie","type"]) || "").trim();
+  const serv = intOf(firstOf(o, ["servings","personnes","parts","portions","pour","yield","couverts"]));
+  return {
+    name: name || "Recette",
+    category: cat || categoryOf(name),
+    servings: Math.max(1, Math.min(30, serv || 4)),
+    minutes: minutesOf(firstOf(o, ["minutes","temps","duree","durée","time","totalTime","cookTime"])),
+    ingredients, steps
+  };
+}
+
+/* Un texte de recette a presque toujours la même charpente : un titre,
+   deux lignes de métadonnées, « Ingrédients », « Préparation ». On suit
+   ces titres quand ils sont là, et on devine ligne par ligne sinon. */
+const H_ING  = /^[#*\s]*(?:les\s+)?ingr[ée]dients?\b/i;
+const H_STEP = /^[#*\s]*(?:pr[ée]paration|[ée]tapes?|instructions?|r[ée]alisation|mode op[ée]ratoire|marche à suivre|recette)\b/i;
+const H_SKIP = /^[#*\s]*(?:mat[ée]riel|ustensiles?|astuces?|conseils?|notes?|variantes?|conservation|accord|vins?|valeurs?|source|d[ée]gustation)\b/i;
+const H_META = /^[#*\s]*(?:pour|temps|pr[ée]paration|cuisson|repos|difficult|budget|portions?|personnes?|niveau|co[ûu]t|calories)\b/i;
+const estTitre = (line, re) => re.test(line) && line.length <= 60;
+
+function estIngredient(line){
+  const t = stripPuce(line);
+  if(!t) return false;
+  const mots = t.split(/\s+/).length;
+  if(mots > 8) return false;
+  if(parseQuick(t).qty != null) return true;
+  return /^\s*[-–—*•·▪◦]/.test(line) && mots <= 5;
+}
+
+function recipeFromText(texte){
+  const head = [], ingLines = [], stepLines = [];
+  let mode = "head";
+  for(const brut of String(texte || "").split(/\r?\n/)){
+    const line = brut.trim();
+    if(!line) continue;
+    if(estTitre(line, H_ING)){ mode = "ing"; continue; }
+    /* « Préparation : 20 min » est une métadonnée, pas un intertitre. */
+    if(estTitre(line, H_STEP) && !/\d+\s*(?:h\b|heures?|min\b|minutes?)/i.test(line)){ mode = "step"; continue; }
+    if(estTitre(line, H_SKIP)){ mode = "skip"; continue; }
+    if(mode === "skip") continue;
+    if(mode === "ing") ingLines.push(line);
+    else if(mode === "step") stepLines.push(line);
+    else head.push(line);
+  }
+
+  let name = "", titreAt = -1;
+  for(let i = 0; i < head.length; i++){
+    const t = stripPuce(head[i]).replace(/\s*:\s*$/, "");
+    if(!t || H_META.test(t)) continue;
+    name = t; titreAt = i; break;
+  }
+
+  /* Sans intertitres : les lignes courtes et chiffrées sont des
+     ingrédients, les phrases sont des étapes. */
+  if(!ingLines.length && !stepLines.length){
+    for(const line of head.slice(titreAt + 1)){
+      if(H_META.test(stripPuce(line))) continue;
+      if(estIngredient(line)) ingLines.push(line);
+      else if(stripPuce(line).split(/\s+/).length >= 4) stepLines.push(line);
+    }
+  }
+
+  const entete = head.join("\n");
+  const serv = entete.match(/(\d{1,2})\s*(?:personnes?|pers\b|parts?|portions?|convives?)/i) || entete.match(/pour\s+(\d{1,2})\b/i);
+  let minutes = null;
+  for(const d of (entete.match(/\d+\s*h(?:\s*\d+)?|\d+\s*(?:heures?|min\b|minutes?)/gi) || [])){
+    const v = minutesOf(d);
+    if(v && (minutes == null || v > minutes)) minutes = v;
+  }
+
+  return recipeOf({
+    name, minutes, servings: serv ? serv[1] : null,
+    category: categoryOf(name + "\n" + entete),
+    ingredients: ingLines, steps: stepLines
+  });
+}
+
+function asRecipes(data){
+  const arr = Array.isArray(data) ? data
+    : (data && Array.isArray(data.recipes)) ? data.recipes
+    : (data && Array.isArray(data.recettes)) ? data.recettes : [data];
+  return arr.map(recipeOf).filter(Boolean);
+}
+function parseRecipes(entree){
+  const raw = String(entree || "").trim();
+  if(!raw) return [];
+  const lien = raw.match(/[#&]r=([A-Za-z0-9\-_%]+)/);
+  if(lien){
+    try{ return asRecipes(JSON.parse(b64urlTo(decodeURIComponent(lien[1])))); }
+    catch(e){ return []; }
+  }
+  if(/^https?:\/\/\S+$/.test(raw)) return [];
+  const bloc = raw.match(/```(?:json)?\s*([\s\S]+?)```/);
+  const json = /^[{[]/.test(raw) ? raw : (bloc && /^[{[]/.test(bloc[1].trim()) ? bloc[1].trim() : null);
+  if(json){
+    try{ return asRecipes(JSON.parse(json)); }catch(e){ /* pas du JSON valide : on lira le texte */ }
+  }
+  const r = recipeFromText(raw);
+  return r ? [r] : [];
+}
 let toastTimer;
 function toast(msg){
   const t = $("#toast");
@@ -1206,7 +1388,9 @@ function renderHead(){
     const n = state.recipes.size;
     const vu = (state.find || state.cat) ? recipesShown().length : n;
     count.textContent = !n ? "" : ((state.find || state.cat) ? vu + " sur " + n : n + (n>1 ? " recettes" : " recette"));
-    acts.innerHTML = '<button class="btn btn-primary" data-act="new-recipe"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Recette</button>';
+    acts.innerHTML = '<button class="btn" data-act="import-recipe" aria-label="Importer une recette" title="Importer une recette collée">' +
+        '<svg viewBox="0 0 24 24"><path d="M12 4v10"/><path d="M8.5 11l3.5 3.5L15.5 11"/><path d="M5 19h14"/></svg></button>' +
+      '<button class="btn btn-primary" data-act="new-recipe"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Recette</button>';
   } else if(state.tab === "list"){
     const undone = [...state.shopping.values()].filter(i=>!i.done).length;
     const done = state.shopping.size - undone;
@@ -1281,7 +1465,7 @@ function renderRecipes(){
 
   if(!total){
     ul.innerHTML = '<li>' + (state.ready
-      ? '<div class="empty"><span class="pic" aria-hidden="true">📖</span><strong>Aucune recette pour l’instant</strong>Touchez « Recette » en haut pour écrire la première : ses ingrédients partiront ensuite dans les courses en un geste.</div>'
+      ? '<div class="empty"><span class="pic" aria-hidden="true">📖</span><strong>Aucune recette pour l’instant</strong>Touchez « Recette » pour écrire la première, ou la flèche à côté pour coller une recette trouvée ailleurs : ses ingrédients partiront ensuite dans les courses en un geste.</div>'
       : '<div class="empty">Chargement…</div>') + '</li>';
     return;
   }
@@ -1430,12 +1614,27 @@ function recipeSheetHTML(r){
     '</div>';
 }
 
-function openRecipeForm(id){
-  const r = id ? state.recipes.get(id) : null;
-  sheetFormId = r ? r.id : null;
+function recipeByName(name){
+  const n = norm(name || "");
+  if(!n) return null;
+  for(const r of state.recipes.values()) if(norm(r.name) === n) return r;
+  return null;
+}
+/* `brouillon` : une recette importée, pas encore enregistrée. Si une
+   recette du même nom existe déjà, le formulaire la met à jour plutôt
+   que d'en créer une jumelle — réimporter deux fois ne duplique rien. */
+function openRecipeForm(id, brouillon){
+  const prev = id ? state.recipes.get(id) : (brouillon ? recipeByName(brouillon.name) : null);
+  const r = brouillon || prev || null;
+  sheetFormId = prev ? prev.id : null;
+  const titre = brouillon ? (prev ? "Mettre à jour la recette" : "Recette reçue")
+                          : (prev ? "Modifier la recette" : "Nouvelle recette");
   openSheet(
-    '<div class="sheet-head"><h2>' + (r ? "Modifier la recette" : "Nouvelle recette") + '</h2>' + CLOSE_BTN + '</div>' +
+    '<div class="sheet-head"><h2>' + titre + '</h2>' + CLOSE_BTN + '</div>' +
     '<form class="sheet-body" id="recipeForm">' +
+    (brouillon ? '<p class="note" style="margin:0 0 16px;text-align:left">' + (prev
+      ? 'Une recette de ce nom est déjà là : enregistrer remplacera la sienne.'
+      : 'Relisez les quantités — le rayon de chaque ingrédient est deviné, il se corrige depuis les courses.') + '</p>' : "") +
       '<div class="field"><label for="rName">Nom</label><input id="rName" name="name" required placeholder="Gratin de courgettes" value="' + (r ? esc(r.name) : "") + '"></div>' +
       '<div class="row2">' +
         '<div class="field"><label for="rCat">Catégorie</label>' +
@@ -1449,7 +1648,8 @@ function openRecipeForm(id){
       '<div class="field"><label for="rSteps">Préparation</label><textarea id="rSteps" name="steps" placeholder="Une étape par ligne.">' + (r ? esc((r.steps||[]).join("\n")) : "") + '</textarea></div>' +
     '</form>' +
     '<div class="sheet-foot">' +
-      (r ? '<button class="btn" data-act="open-recipe" data-id="' + esc(r.id) + '">Annuler</button>'
+      ((prev && !brouillon)
+         ? '<button class="btn" data-act="open-recipe" data-id="' + esc(prev.id) + '">Annuler</button>'
          : '<button class="btn" data-act="close">Annuler</button>') +
       '<button class="btn btn-primary" data-act="save-recipe">Enregistrer</button></div>'
   );
@@ -1503,6 +1703,66 @@ async function saveRecipe(){
   sheetFormId = null;
   closeSheet();
   toast("« " + name + " » " + (prev ? "mise à jour" : "enregistrée"));
+}
+
+let importDrafts = [];
+function openImportSheet(){
+  openSheet(
+    '<div class="sheet-head"><h2>Importer une recette</h2>' + CLOSE_BTN + '</div>' +
+    '<div class="sheet-body">' +
+      '<div class="field"><label for="impText">Collez la recette</label>' +
+        '<textarea id="impText" placeholder="Poulet basquaise\nPour 4 personnes · 1 h\n\nIngrédients\n- 4 cuisses de poulet\n- 3 poivrons\n\nPréparation\n1. Dorer le poulet…"></textarea>' +
+        '<div class="hint">Le texte d\'une recette, un lien « Ajouter à Panier Commun », ou du JSON : l\'app en tire une fiche que vous relisez avant d\'enregistrer.</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="sheet-foot">' +
+      '<button class="btn" data-act="close">Annuler</button>' +
+      '<button class="btn btn-primary" data-act="import-read">Lire la recette</button>' +
+    '</div>'
+  );
+  const ta = document.getElementById("impText");
+  if(ta) ta.focus();
+}
+function openImportPick(list){
+  importDrafts = list;
+  openSheet(
+    '<div class="sheet-head"><h2>' + list.length + ' recettes reçues</h2>' + CLOSE_BTN + '</div>' +
+    '<div class="sheet-body"><ul class="picklist">' +
+      list.map((r, i) => '<li><button data-act="import-one" data-i="' + i + '">' + esc(r.name) +
+        '<span class="cat">' + (r.ingredients || []).length + ' ingr.</span></button></li>').join("") +
+    '</ul><p class="note">Touchez une recette pour la relire, ou ajoutez-les toutes d\'un coup.</p></div>' +
+    '<div class="sheet-foot">' +
+      '<button class="btn" data-act="close">Annuler</button>' +
+      '<button class="btn btn-primary" data-act="import-all">Tout ajouter</button>' +
+    '</div>'
+  );
+}
+/* Lien reçu : à l'ouverture de l'app, et aussi quand on le touche alors
+   que l'app est déjà ouverte sur la même adresse (le navigateur ne
+   recharge alors rien, il change juste le fragment). */
+function openImportFrom(code){
+  const list = parseRecipes("#r=" + code);
+  if(list.length === 1) openRecipeForm("", list[0]);
+  else if(list.length) openImportPick(list);
+  else toast("Ce lien de recette n'a pas pu être lu.");
+}
+async function saveImported(d){
+  const prev = recipeByName(d.name);
+  const id = prev ? prev.id : slug(d.name) + "-" + Math.random().toString(36).slice(2,6);
+  const body = {
+    name:d.name, category:d.category || "", servings:d.servings || 4, minutes:d.minutes || null,
+    ingredients:d.ingredients || [], steps:d.steps || [],
+    inList: prev ? !!prev.inList : false,
+    listServings: prev ? (prev.listServings != null ? prev.listServings : null) : null,
+    createdAt: (prev && prev.createdAt) || Date.now()
+  };
+  await save("recipes", id, body);
+  /* déjà aux courses : ses lignes repartent des nouveaux ingrédients */
+  if(prev && prev.inList){
+    const fresh = Object.assign({id:id}, body);
+    await recipeOffList(fresh);
+    await recipeToList(fresh, body.listServings || body.servings);
+  }
 }
 
 function openSyncSheet(){
@@ -1734,6 +1994,28 @@ document.addEventListener("click", async (ev)=>{
     return;
   }
   if(act === "new-recipe"){ openRecipeForm(""); return; }
+  if(act === "import-recipe"){ openImportSheet(); return; }
+  if(act === "import-read"){
+    const ta = document.getElementById("impText");
+    const list = parseRecipes(ta ? ta.value : "");
+    if(!list.length){ toast("Je n'ai pas reconnu de recette là-dedans."); return; }
+    if(list.length === 1) openRecipeForm("", list[0]);
+    else openImportPick(list);
+    return;
+  }
+  if(act === "import-one"){
+    const d = importDrafts[parseInt(btn.dataset.i, 10)];
+    if(d) openRecipeForm("", d);
+    return;
+  }
+  if(act === "import-all"){
+    const list = importDrafts;
+    importDrafts = [];
+    for(const d of list) await saveImported(d);
+    closeSheet();
+    toast(list.length + (list.length > 1 ? " recettes ajoutées" : " recette ajoutée"));
+    return;
+  }
   if(act === "edit-recipe"){ openRecipeForm(id); return; }
   if(act === "save-recipe"){ await saveRecipe(); return; }
   if(act === "rm-ing"){
@@ -1928,6 +2210,7 @@ document.addEventListener("input", ev=>{
 (function boot(){
   loadLocal();
   const m = location.hash.match(/[#&]f=([^&]+)/);
+  const rec = location.hash.match(/[#&]r=([A-Za-z0-9\-_%]+)/);
   if(m){
     try{
       const next = JSON.parse(atob(decodeURIComponent(m[1])));
@@ -1937,8 +2220,8 @@ document.addEventListener("input", ev=>{
         setTimeout(()=>toast("Foyer rejoint — les deux téléphones partagent la même liste."), 700);
       }
     }catch(e){}
-    history.replaceState(null, "", location.pathname + location.search);
   }
+  if(m || rec) history.replaceState(null, "", location.pathname + location.search);
   const vide = COLS.every(c=>Object.keys(localData[c]||{}).length === 0);
   if(vide && !cfg.url){
     const now = Date.now();
@@ -1950,6 +2233,13 @@ document.addEventListener("input", ev=>{
   render();
   updateSync();
   connect();
+  if(rec) openImportFrom(rec[1]);
+  window.addEventListener("hashchange", ()=>{
+    const again = location.hash.match(/[#&]r=([A-Za-z0-9\-_%]+)/);
+    if(!again) return;
+    history.replaceState(null, "", location.pathname + location.search);
+    openImportFrom(again[1]);
+  });
   if("serviceWorker" in navigator && location.protocol.indexOf("http") === 0){
     navigator.serviceWorker.register("sw.js").catch(function(){});
   }
