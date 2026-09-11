@@ -5,19 +5,27 @@ Une page, aucune dépendance, aucun compte à créer pour s'en servir.
 
 → **https://remix4449.github.io/panier-commun/**
 
-- **Recettes** — quarante-cinq recettes du carnet au départ, tuiles lisibles,
-  fiche complète avec recalcul des quantités selon le nombre de personnes, et
-  une case à cocher sur la tuile qui verse les ingrédients dans la liste de
-  courses (et les retire quand on la décoche, sans toucher à ce qui a été
-  ajouté à la main). La flèche ↓ en haut avale une recette venue d'ailleurs :
+- **Recettes** — quarante-cinq recettes du carnet au départ, rangées par
+  catégorie ; chaque catégorie se replie d'une touche et reste repliée au
+  retour. Fiche complète avec recalcul des quantités selon le nombre de
+  personnes, et une case à cocher sur la tuile qui verse les ingrédients dans
+  la liste de courses (et les retire quand on la décoche, sans toucher à ce qui
+  a été ajouté à la main) ; « Tout décocher » vide d'un coup ce que les
+  recettes y ont mis. La flèche ↓ en haut avale une recette venue d'ailleurs :
   son texte brut, un lien d'import, ou du JSON.
 - **Courses** — triées par rayon dans l'ordre d'un parcours de magasin. La barre
   de recherche comprend la quantité au vol (« 2 kg pommes de terre »), devine le
   rayon et propose les ingrédients déjà connus — dont les deux cent dix-neuf
-  produits du carnet, chacun avec le rayon où il se trouve. Les quantités d'un
+  produits du carnet, chacun avec le rayon où il se trouve. Ce qu'on ajoute à
+  la volée est retenu — nom, unité, rayon corrigé — et reproposé plus tard,
+  même une fois l'article coché puis retiré de la liste. Les quantités d'un
   même ingrédient venant de plusieurs recettes s'additionnent.
 - **Semaine** — midi et soir sur sept jours, et un bouton qui envoie tous les
   repas planifiés dans les courses.
+
+Au rechargement, l'app rouvre l'onglet où l'on était, à la hauteur où l'on
+était. Et quand le clavier du téléphone s'ouvre, la page remonte pour garder le
+champ en cours de saisie au-dessus de lui.
 
 ## Le carnet
 
@@ -60,6 +68,11 @@ droite ouvre la feuille de synchronisation : on y colle l'adresse d'une base
 Firebase Realtime Database et un code de foyer, puis on envoie le lien
 d'invitation à l'autre téléphone (le code voyage dans le fragment `#f=`, il ne
 part donc jamais vers un serveur).
+
+Cinq collections voyagent : `recipes`, `shopping`, `plan`, `rayons` et
+`pantry` (la mémoire des articles ajoutés à la volée). L'onglet ouvert, la
+position dans la page et les catégories repliées restent propres à chaque
+téléphone.
 
 Le transport n'utilise aucun SDK : lecture temps réel par `EventSource` sur le
 flux SSE de l'API REST, écriture par `PUT` document par document. Chaque
