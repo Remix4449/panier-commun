@@ -90,9 +90,15 @@ build, pas de test runner, pas de dépendance — et rien de tout cela n'est
 souhaitable ici.
 
 - `save(col, id, body)` / `drop(col, id)` écrivent une collection
-  (`recipes`, `shopping`, `plan`, `rayons`) : localStorage d'abord, puis
-  file d'attente vers Firebase si un foyer est configuré. Tout passe par
-  là, jamais par `localData` directement.
+  (`recipes`, `shopping`, `plan`, `rayons`, `pantry`) : localStorage
+  d'abord, puis file d'attente vers Firebase si un foyer est configuré.
+  Tout passe par là, jamais par `localData` directement.
+- `pantry` est la mémoire des articles ajoutés à la volée — nom, unité,
+  rayon corrigé. Elle sert les suggestions de la barre d'ajout et survit à
+  la purge de la liste ; `remember()` l'alimente, plafonnée à 240 entrées.
+- Ce qui est propre à un téléphone — onglet ouvert, position dans la page,
+  catégories de recettes repliées — vit à part dans `panier.ui.v1`
+  (`loadUI()` / `saveUI()`), jamais dans les collections partagées.
 - L'import vit sous l'intertitre `/* --- import --- */` du script :
   `parseRecipes()` avale un lien, du JSON ou du texte libre et rend des
   recettes normalisées ; `openRecipeForm(id, brouillon)` les affiche pour

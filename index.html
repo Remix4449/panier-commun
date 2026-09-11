@@ -600,8 +600,15 @@ button{cursor:pointer;background:none;border:none;padding:0}
 .addbar .clr:hover{background:var(--surface-2);color:var(--ink)}
 
 /* ---------- groupes de recettes ---------- */
-.grouphead{display:flex;align-items:center;gap:10px;margin:10px 2px 0}
+.grouphead{display:flex;align-items:center;margin:10px 2px 0}
 .grouphead:first-child{margin-top:0}
+.grouphead .fold{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:3px 0}
+.grouphead .chev{
+  width:15px;height:15px;flex:none;stroke:var(--muted);fill:none;stroke-width:2.6;
+  stroke-linecap:round;stroke-linejoin:round;transition:transform .15s;
+}
+.grouphead[data-closed="1"] .chev{transform:rotate(-90deg)}
+.grouphead[data-closed="1"] .n{color:var(--accent);background:var(--accent-soft)}
 .grouphead h3{
   font-family:"Bricolage Grotesque",sans-serif;font-size:15px;font-weight:700;margin:0;
   letter-spacing:-.015em;color:var(--ink);
@@ -611,6 +618,18 @@ button{cursor:pointer;background:none;border:none;padding:0}
   font-family:"DM Mono",ui-monospace,monospace;font-size:11.5px;color:var(--muted);
   background:var(--surface-2);border-radius:999px;padding:2px 9px;
 }
+
+/* ---------- clavier virtuel ----------
+   Le clavier recouvre le bas de l'écran sans faire remonter la page : le
+   champ qu'on remplit se retrouve dessous. La barre d'onglets ne sert à
+   rien pendant la frappe, on l'efface ; et on rend à la page la hauteur
+   que le clavier lui prend (--kb), sans quoi un champ situé en bas n'a
+   plus assez de vide sous lui pour remonter. */
+:root.kb .tabbar{display:none}
+:root.kb .view{padding-bottom:calc(var(--kb, 0px) + 28px)}
+:root.kb .scrim{bottom:var(--kb, 0px)}
+:root.kb .sheet{max-height:calc(100dvh - var(--kb, 0px) - 12px)}
+.item,.ingrow,.addbar,.field{scroll-margin-top:110px;scroll-margin-bottom:130px}
 
 /* ---------- pied de la liste de courses ---------- */
 .listfoot{display:flex;justify-content:center;margin:4px 0 0}
@@ -1259,6 +1278,90 @@ function parseRecipes(entree){
   const r = recipeFromText(raw);
   return r ? [r] : [];
 }
+/* --------------------- mémoire de l'interface ---------------------
+   L'onglet ouvert, la position dans la page et les catégories repliées
+   survivent au rechargement : on rouvre l'app là où on l'avait laissée.
+   Rien de tout cela n'est partagé — c'est propre à ce téléphone.
+------------------------------------------------------------------- */
+const UI_TABS = ["recipes","list","week"];
+let ui = {tab:"recipes", scroll:0, closed:[]};
+
+function loadUI(){
+  try{
+    const raw = JSON.parse(localStorage.getItem(LS_UI) || "null");
+    if(raw && typeof raw === "object"){
+      if(UI_TABS.indexOf(raw.tab) >= 0) ui.tab = raw.tab;
+      if(typeof raw.scroll === "number" && raw.scroll >= 0) ui.scroll = raw.scroll;
+      if(Array.isArray(raw.closed)) ui.closed = raw.closed.filter(x=>typeof x === "string");
+    }
+  }catch(e){}
+}
+let uiTimer;
+function saveUI(now){
+  clearTimeout(uiTimer);
+  const write = ()=>{ try{ localStorage.setItem(LS_UI, JSON.stringify(ui)); }catch(e){} };
+  if(now) write(); else uiTimer = setTimeout(write, 300);
+}
+function rememberScroll(){
+  ui.scroll = Math.max(0, Math.round(window.scrollY || window.pageYOffset || 0));
+  saveUI();
+}
+function restoreScroll(){
+  const y = ui.scroll;
+  if(!y) return;
+  let stop = false, tries = 0;
+  const cancel = ()=>{ stop = true; };
+  window.addEventListener("touchstart", cancel, {passive:true, once:true});
+  window.addEventListener("wheel", cancel, {passive:true, once:true});
+  /* La hauteur de la page bouge encore — polices, données du foyer qui
+     arrivent : on repose la page à sa place tant qu'elle n'y tient pas. */
+  const go = ()=>{
+    if(stop) return;
+    window.scrollTo(0, y);
+    if(++tries < 10 && Math.abs((window.scrollY||0) - y) > 2) setTimeout(go, 120);
+  };
+  requestAnimationFrame(go);
+  setTimeout(go, 400);
+  setTimeout(go, 900);
+}
+
+/* --------------------- clavier virtuel ---------------------
+   Sur téléphone, le clavier recouvre le bas de l'écran sans faire remonter
+   la page : le champ qu'on remplit se retrouve caché dessous. On mesure la
+   zone réellement visible (visualViewport) et on y ramène le champ actif.
+----------------------------------------------------------- */
+const vvp = window.visualViewport || null;
+function viewTop(){ return vvp ? vvp.offsetTop : 0; }
+function viewHeight(){ return vvp ? vvp.height : window.innerHeight; }
+function kbOpen(){ return vvp ? (window.innerHeight - vvp.height) > 120 : false; }
+function isField(el){
+  return !!el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName || "") && el.type !== "hidden";
+}
+function keepVisible(el){
+  if(!isField(el)) return;
+  const box = el.closest(".item, .ingrow, .field, .addbar") || el;
+  const r = box.getBoundingClientRect();
+  const top = viewTop(), bottom = top + viewHeight();
+  const sheet = el.closest(".sheet-body");
+  if(sheet){
+    const sr = sheet.getBoundingClientRect();
+    const hi = Math.max(sr.top, top) + 12, lo = Math.min(sr.bottom, bottom) - 14;
+    if(r.bottom > lo) sheet.scrollTop += r.bottom - lo;
+    else if(r.top < hi) sheet.scrollTop += r.top - hi;
+    return;
+  }
+  const head = document.querySelector(".topbar");
+  const tabs = document.querySelector(".tabbar");
+  const padTop = (head ? head.getBoundingClientRect().height : 0) + 10;
+  const padBot = ((kbOpen() || !tabs) ? 0 : tabs.getBoundingClientRect().height) + 14;
+  if(r.bottom > bottom - padBot) window.scrollBy({top:r.bottom - (bottom - padBot), behavior:"smooth"});
+  else if(r.top < top + padTop) window.scrollBy({top:r.top - (top + padTop), behavior:"smooth"});
+}
+function followField(){
+  const el = document.activeElement;
+  if(isField(el)) keepVisible(el);
+}
+
 let toastTimer;
 function toast(msg){
   const t = $("#toast");
@@ -1274,13 +1377,14 @@ function toast(msg){
    Hors ligne, les écritures s'empilent dans une file et repartent au retour
    du réseau. Chaque document porte un updatedAt : le plus récent gagne.
 --------------------------------------------------------------------- */
-const COLS = ["recipes","shopping","plan","rayons"];
+const COLS = ["recipes","shopping","plan","rayons","pantry"];
 const LS_DATA = "panier.data.v1";
 const LS_CFG  = "panier.foyer.v1";
-const state = { recipes:new Map(), shopping:new Map(), plan:new Map(), rayons:new Map(),
+const LS_UI   = "panier.ui.v1";
+const state = { recipes:new Map(), shopping:new Map(), plan:new Map(), rayons:new Map(), pantry:new Map(),
                 tab:"recipes", editing:null, ready:false, find:"", cat:"" };
 
-let localData = {recipes:{}, shopping:{}, plan:{}, rayons:{}};
+let localData = {recipes:{}, shopping:{}, plan:{}, rayons:{}, pantry:{}};
 let queue = [];
 let cfg = {url:"", code:""};
 let es = null, esState = "off", firstSync = false, retryTimer = null;
@@ -1293,7 +1397,7 @@ function clean(body){
 function loadLocal(){
   try{
     const raw = JSON.parse(localStorage.getItem(LS_DATA) || "null");
-    if(raw && raw.data){ localData = Object.assign({recipes:{},shopping:{},plan:{},rayons:{}}, raw.data); queue = raw.queue || []; }
+    if(raw && raw.data){ localData = Object.assign({recipes:{},shopping:{},plan:{},rayons:{},pantry:{}}, raw.data); queue = raw.queue || []; }
   }catch(e){}
   try{ cfg = JSON.parse(localStorage.getItem(LS_CFG) || "null") || cfg; }catch(e){}
   const cutoff = Date.now() - 30*24*3600*1000;
@@ -1476,6 +1580,26 @@ function itemFrom(it){
   if(it.manualQty) names.unshift("Ajouté à la volée");
   return names.join(" · ");
 }
+/* Tout ce qu'on ajoute à la volée est retenu : le nom tel qu'on l'écrit,
+   son unité et son rayon — y compris corrigé après coup depuis la liste.
+   L'article peut ensuite être coché, retiré, vidé avec les autres : la
+   barre de recherche le reproposera quand même, sur les deux téléphones. */
+const PANTRY_MAX = 240;
+async function remember(name, unit, rayon){
+  if(!name) return;
+  const u = unit || "", ray = rayon || guessRayon(name);
+  const id = itemId(name, u);
+  const cur = state.pantry.get(id);
+  if(cur && cur.name === name && (cur.unit||"") === u && (cur.rayon||"") === ray &&
+     (Date.now() - (cur.usedAt||0)) < 3600*1000) return;
+  await save("pantry", id, {name, unit:u, rayon:ray, usedAt:Date.now()});
+  const all = [...state.pantry.values()];
+  if(all.length > PANTRY_MAX){
+    all.sort((a,b)=>(a.usedAt||0)-(b.usedAt||0));
+    for(const old of all.slice(0, all.length - PANTRY_MAX)) await drop("pantry", old.id);
+  }
+}
+
 async function addManual(name, qty, unit, rayon){
   if(!name) return;
   const id = itemId(name, unit);
@@ -1487,6 +1611,7 @@ async function addManual(name, qty, unit, rayon){
   body.done = false;
   body.name = body.name || name;
   await save("shopping", id, body);
+  await remember(body.name, body.unit, body.rayon);
   toast(add!=null ? `${fmtQty(add)} ${unit||""} ${name} ajouté`.replace(/\s+/g," ") : `${name} ajouté`);
 }
 async function recipeToList(recipe, servings){
@@ -1535,8 +1660,10 @@ function renderHead(){
   if(state.tab === "recipes"){
     const n = state.recipes.size;
     const vu = (state.find || state.cat) ? recipesShown().length : n;
+    const cochees = [...state.recipes.values()].filter(r=>r.inList).length;
     count.textContent = !n ? "" : ((state.find || state.cat) ? vu + " sur " + n : n + (n>1 ? " recettes" : " recette"));
-    acts.innerHTML = '<button class="btn" data-act="import-recipe" aria-label="Importer une recette" title="Importer une recette collée">' +
+    acts.innerHTML = (cochees ? '<button class="btn btn-quiet" data-act="uncheck-all">Tout décocher</button>' : "") +
+      '<button class="btn" data-act="import-recipe" aria-label="Importer une recette" title="Importer une recette collée">' +
         '<svg viewBox="0 0 24 24"><path d="M12 4v10"/><path d="M8.5 11l3.5 3.5L15.5 11"/><path d="M5 19h14"/></svg></button>' +
       '<button class="btn btn-primary" data-act="new-recipe"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Recette</button>';
   } else if(state.tab === "list"){
@@ -1554,6 +1681,8 @@ function renderHead(){
 }
 
 function catOf(r){ return ((r && r.category) || "").trim() || SANS_CAT; }
+function catKey(cat){ return "c-" + slug(cat); }
+function catClosed(cat){ return ui.closed.indexOf(catKey(cat)) >= 0; }
 function knownCats(){
   const out = new Set(CATEGORIES);
   for(const r of state.recipes.values()){
@@ -1628,19 +1757,36 @@ function renderRecipes(){
     ul.innerHTML = shown.map(r => tileHTML(r, false)).join("");
     return;
   }
+  /* Chaque catégorie se replie d'une touche ; repliée, son en-tête dit
+     encore ce qu'elle contient et ce qui part déjà aux courses. */
   let html = "";
   for(const c of cats){
     const list = shown.filter(r => catOf(r) === c);
     if(!list.length) continue;
-    html += '<li class="grouphead"><h3>' + catPic(c) + ' ' + esc(c) + '</h3>' +
-            '<span class="rule"></span><span class="n">' + list.length + '</span></li>' +
-            list.map(r => tileHTML(r, true)).join("");
+    const fermee = catClosed(c);
+    const dans = list.filter(r => r.inList).length;
+    html += '<li class="grouphead" data-closed="' + (fermee ? 1 : 0) + '">' +
+              '<button class="fold" data-act="fold-cat" data-cat="' + esc(c) + '" aria-expanded="' + (fermee ? "false" : "true") + '">' +
+                '<svg class="chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>' +
+                '<h3>' + catPic(c) + ' ' + esc(c) + '</h3><span class="rule"></span>' +
+                '<span class="n">' + (dans ? dans + " ✓ · " : "") + list.length + '</span>' +
+              '</button></li>' +
+            (fermee ? "" : list.map(r => tileHTML(r, true)).join(""));
   }
   ul.innerHTML = html;
 }
 
 function renderList(){
   const wrap = $("#shopList");
+  /* Un envoi de l'autre téléphone redessine la liste : on remet le curseur
+     là où il était pour ne pas couper une saisie en cours. */
+  const actif = document.activeElement;
+  let keep = null;
+  if(isField(actif) && wrap.contains(actif) && actif.dataset && actif.dataset.id){
+    let start = null;
+    try{ start = actif.selectionStart; }catch(e){}
+    keep = {id:actif.dataset.id, name:actif.name, start};
+  }
   const items = [...state.shopping.values()];
   const defs = rayonList();
   const byKey = new Map(defs.map(d => [d.key, d]));
@@ -1693,6 +1839,13 @@ function renderList(){
     html += "</ul></section>";
   }
   wrap.innerHTML = html + foot;
+  if(keep){
+    const back = wrap.querySelector('.item[data-id="' + keep.id + '"] [name="' + keep.name + '"]');
+    if(back){
+      back.focus();
+      try{ if(keep.start != null) back.setSelectionRange(keep.start, keep.start); }catch(e){}
+    }
+  }
 }
 
 function renderWeek(){
@@ -2047,9 +2200,10 @@ function catalog(){
     for(const n of noms) out.set(norm(n), {name:n, rayon});
   }
   for(const r of state.recipes.values()){
-    for(const ing of (r.ingredients||[])) out.set(norm(ing.name), {name:ing.name, rayon:ing.rayon||guessRayon(ing.name), unit:ing.unit});
+    for(const ing of (r.ingredients||[])) out.set(norm(ing.name), {name:ing.name, rayon:ing.rayon||guessRayon(ing.name), unit:ing.unit, known:true});
   }
-  for(const it of state.shopping.values()) out.set(norm(it.name), {name:it.name, rayon:it.rayon, unit:it.unit});
+  for(const p of state.pantry.values()) out.set(norm(p.name), {name:p.name, rayon:p.rayon||guessRayon(p.name), unit:p.unit, known:true});
+  for(const it of state.shopping.values()) out.set(norm(it.name), {name:it.name, rayon:it.rayon, unit:it.unit, known:true});
   return [...out.values()];
 }
 function refreshAddBar(){
@@ -2064,7 +2218,16 @@ function refreshAddBar(){
       '<span>' + esc(p.name) + '</span><span class="ray">→ ' + esc(rayonName(guessRayon(p.name))) + '</span>';
   } else parsed.hidden = true;
   const q = norm(p.name);
-  const hits = q.length >= 2 ? catalog().filter(c=>norm(c.name).includes(q)).slice(0,6) : [];
+  /* Ce qu'on a déjà ajouté soi-même passe devant les mots du dictionnaire,
+     et un début de mot devant un morceau trouvé au milieu. */
+  const hits = q.length < 2 ? [] : catalog()
+    .map(c=>{
+      const at = norm(c.name).indexOf(q);
+      return at < 0 ? null : {c, score:(c.known ? 0 : 2) + (at === 0 ? 0 : 1)};
+    })
+    .filter(Boolean)
+    .sort((a,b)=> a.score - b.score || a.c.name.localeCompare(b.c.name,"fr"))
+    .slice(0,6).map(x=>x.c);
   if(!hits.length){ sug.hidden = true; return; }
   sug.hidden = false;
   sug.innerHTML = hits.map(c=>'<button type="button" data-act="suggest" data-name="' + esc(c.name) + '" data-rayon="' + esc(c.rayon||"divers") + '" data-unit="' + esc(c.unit||"") + '">' +
@@ -2148,6 +2311,21 @@ document.addEventListener("click", async (ev)=>{
     toast("Ce téléphone n'est plus relié");
     return;
   }
+  if(act === "fold-cat"){
+    const key = catKey(btn.dataset.cat);
+    const at = ui.closed.indexOf(key);
+    if(at >= 0) ui.closed.splice(at, 1); else ui.closed.push(key);
+    saveUI(true);
+    renderRecipes();
+    return;
+  }
+  if(act === "uncheck-all"){
+    const cochees = [...state.recipes.values()].filter(r=>r.inList);
+    if(!cochees.length){ toast("Aucune recette cochée"); return; }
+    for(const r of cochees) await recipeOffList(r);
+    toast(cochees.length > 1 ? cochees.length + " recettes décochées" : "Recette décochée");
+    return;
+  }
   if(act === "new-recipe"){ openRecipeForm(""); return; }
   if(act === "import-recipe"){ openImportSheet(); return; }
   if(act === "import-read"){
@@ -2217,7 +2395,7 @@ document.addEventListener("click", async (ev)=>{
     state.editing = state.editing === id ? null : id;
     renderList();
     const input = document.querySelector('.item.editing input[name="qty"]');
-    if(input) input.focus();
+    if(input){ input.focus(); keepVisible(input); }
     return;
   }
   if(act === "remove-item"){
@@ -2331,9 +2509,15 @@ document.addEventListener("change", async (ev)=>{
   }
   if(el.name === "unit" || el.name === "qty"){
     const newId = itemId(body.name, body.unit);
-    if(newId !== id){ await drop("shopping", id); state.editing = newId; await save("shopping", newId, body); return; }
+    if(newId !== id){
+      await drop("shopping", id); state.editing = newId;
+      await save("shopping", newId, body);
+      await remember(body.name, body.unit, body.rayon);
+      return;
+    }
   }
   await save("shopping", id, body);
+  await remember(body.name, body.unit, body.rayon);
 });
 
 $("#addForm").addEventListener("submit", async (ev)=>{
@@ -2352,15 +2536,51 @@ $("#findInput").addEventListener("input", ()=>{
   renderHead(); renderRecipes();
 });
 
+function showTab(name){
+  state.tab = UI_TABS.indexOf(name) >= 0 ? name : "recipes";
+  document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-current", String(t.dataset.tab === state.tab)));
+  document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active", v.id === "view-" + state.tab));
+  renderHead();
+}
 document.querySelectorAll(".tab").forEach(tab=>{
   tab.addEventListener("click", ()=>{
-    state.tab = tab.dataset.tab;
-    document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-current", String(t === tab)));
-    document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active", v.id === "view-" + state.tab));
+    showTab(tab.dataset.tab);
     window.scrollTo({top:0});
-    renderHead();
+    ui.tab = state.tab; ui.scroll = 0; saveUI(true);
   });
 });
+
+/* ---- position dans la page, retenue pour le prochain démarrage ---- */
+let scrollTick = false;
+window.addEventListener("scroll", ()=>{
+  if(scrollTick) return;
+  scrollTick = true;
+  requestAnimationFrame(()=>{ scrollTick = false; rememberScroll(); });
+}, {passive:true});
+window.addEventListener("pagehide", ()=>{ rememberScroll(); saveUI(true); });
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState === "hidden"){ rememberScroll(); saveUI(true); }
+});
+
+/* ---- clavier : le champ actif reste visible ---- */
+document.addEventListener("focusin", ev=>{
+  const el = ev.target;
+  if(!isField(el)) return;
+  keepVisible(el);
+  setTimeout(()=>{ if(document.activeElement === el) keepVisible(el); }, 180);
+  setTimeout(()=>{ if(document.activeElement === el) keepVisible(el); }, 450);
+});
+if(vvp){
+  vvp.addEventListener("resize", ()=>{
+    const pris = Math.max(0, Math.round(window.innerHeight - vvp.height));
+    const ouvert = pris > 120;
+    document.documentElement.style.setProperty("--kb", (ouvert ? pris : 0) + "px");
+    document.documentElement.classList.toggle("kb", ouvert);
+    followField();
+    setTimeout(followField, 140);
+    setTimeout(followField, 380);
+  });
+}
 
 $("#scrim").addEventListener("click", ev=>{ if(ev.target === $("#scrim")) closeSheet(); });
 document.addEventListener("keydown", ev=>{
@@ -2378,6 +2598,8 @@ document.addEventListener("input", ev=>{
 /* ------------------------------ démarrage ------------------------------ */
 (function boot(){
   loadLocal();
+  loadUI();
+  if("scrollRestoration" in history) history.scrollRestoration = "manual";
   const m = location.hash.match(/[#&]f=([^&]+)/);
   const rec = location.hash.match(/[#&]r=([A-Za-z0-9\-_%]+)/);
   if(m){
@@ -2399,7 +2621,9 @@ document.addEventListener("input", ev=>{
   }
   for(const col of COLS) state[col] = visible(col);
   state.ready = true;
+  showTab(ui.tab);
   render();
+  restoreScroll();
   updateSync();
   connect();
   if(rec) openImportFrom(rec[1]);
