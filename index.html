@@ -99,42 +99,43 @@ img{max-width:100%}
   color-scheme:dark;
 }
 
-/* un ton par rayon : porté par la section, hérité par ses enfants */
-.aisle{--ray:#7A6A5A;--ray-soft:#EFE6DA}
-.aisle[data-rayon="fruits"]     {--ray:#3E8E4F;--ray-soft:#E2F2DE}
-.aisle[data-rayon="boucherie"]  {--ray:#B8483F;--ray-soft:#FBE3DF}
-.aisle[data-rayon="cremerie"]   {--ray:#A8801B;--ray-soft:#FAEFD1}
-.aisle[data-rayon="boulangerie"]{--ray:#98682F;--ray-soft:#F6E7D2}
-.aisle[data-rayon="epicerie"]   {--ray:#6D7A2B;--ray-soft:#EDF1D7}
-.aisle[data-rayon="sucre"]      {--ray:#A24479;--ray-soft:#F8E2EF}
-.aisle[data-rayon="surgeles"]   {--ray:#2F7391;--ray-soft:#DCEDF5}
-.aisle[data-rayon="boissons"]   {--ray:#5B5BA6;--ray-soft:#E6E6F7}
-.aisle[data-rayon="maison"]     {--ray:#457C79;--ray-soft:#DDEEEC}
-.aisle[data-rayon="divers"]     {--ray:#7A6A5A;--ray-soft:#EFE6DA}
+/* Nuancier : un ton par rayon, choisi parmi ces dix teintes. Porté par
+   l'élément qui déclare data-swatch, hérité par ses enfants. */
+[data-swatch]        {--ray:#7A6A5A;--ray-soft:#EFE6DA}
+[data-swatch="leaf"] {--ray:#3E8E4F;--ray-soft:#E2F2DE}
+[data-swatch="rose"] {--ray:#B8483F;--ray-soft:#FBE3DF}
+[data-swatch="amber"]{--ray:#A8801B;--ray-soft:#FAEFD1}
+[data-swatch="crust"]{--ray:#98682F;--ray-soft:#F6E7D2}
+[data-swatch="olive"]{--ray:#6D7A2B;--ray-soft:#EDF1D7}
+[data-swatch="berry"]{--ray:#A24479;--ray-soft:#F8E2EF}
+[data-swatch="ice"]  {--ray:#2F7391;--ray-soft:#DCEDF5}
+[data-swatch="indigo"]{--ray:#5B5BA6;--ray-soft:#E6E6F7}
+[data-swatch="teal"] {--ray:#457C79;--ray-soft:#DDEEEC}
+[data-swatch="stone"]{--ray:#7A6A5A;--ray-soft:#EFE6DA}
 @media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]) .aisle{--ray:#C2AE96;--ray-soft:#2E2419}
-  :root:not([data-theme="light"]) .aisle[data-rayon="fruits"]     {--ray:#7EC98C;--ray-soft:#1B2E1E}
-  :root:not([data-theme="light"]) .aisle[data-rayon="boucherie"]  {--ray:#EB8E84;--ray-soft:#33201D}
-  :root:not([data-theme="light"]) .aisle[data-rayon="cremerie"]   {--ray:#E0BC5E;--ray-soft:#312716}
-  :root:not([data-theme="light"]) .aisle[data-rayon="boulangerie"]{--ray:#D8A56C;--ray-soft:#2F2419}
-  :root:not([data-theme="light"]) .aisle[data-rayon="epicerie"]   {--ray:#B5C46C;--ray-soft:#272B17}
-  :root:not([data-theme="light"]) .aisle[data-rayon="sucre"]      {--ray:#DE8FBB;--ray-soft:#311F2A}
-  :root:not([data-theme="light"]) .aisle[data-rayon="surgeles"]   {--ray:#79BBD6;--ray-soft:#17282F}
-  :root:not([data-theme="light"]) .aisle[data-rayon="boissons"]   {--ray:#A0A0E0;--ray-soft:#20203A}
-  :root:not([data-theme="light"]) .aisle[data-rayon="maison"]     {--ray:#7CC2BE;--ray-soft:#182B2A}
-  :root:not([data-theme="light"]) .aisle[data-rayon="divers"]     {--ray:#C2AE96;--ray-soft:#2E2419}
+  :root:not([data-theme="light"]) [data-swatch]        {--ray:#C2AE96;--ray-soft:#2E2419}
+  :root:not([data-theme="light"]) [data-swatch="leaf"] {--ray:#7EC98C;--ray-soft:#1B2E1E}
+  :root:not([data-theme="light"]) [data-swatch="rose"] {--ray:#EB8E84;--ray-soft:#33201D}
+  :root:not([data-theme="light"]) [data-swatch="amber"]{--ray:#E0BC5E;--ray-soft:#312716}
+  :root:not([data-theme="light"]) [data-swatch="crust"]{--ray:#D8A56C;--ray-soft:#2F2419}
+  :root:not([data-theme="light"]) [data-swatch="olive"]{--ray:#B5C46C;--ray-soft:#272B17}
+  :root:not([data-theme="light"]) [data-swatch="berry"]{--ray:#DE8FBB;--ray-soft:#311F2A}
+  :root:not([data-theme="light"]) [data-swatch="ice"]  {--ray:#79BBD6;--ray-soft:#17282F}
+  :root:not([data-theme="light"]) [data-swatch="indigo"]{--ray:#A0A0E0;--ray-soft:#20203A}
+  :root:not([data-theme="light"]) [data-swatch="teal"] {--ray:#7CC2BE;--ray-soft:#182B2A}
+  :root:not([data-theme="light"]) [data-swatch="stone"]{--ray:#C2AE96;--ray-soft:#2E2419}
 }
-:root[data-theme="dark"] .aisle{--ray:#C2AE96;--ray-soft:#2E2419}
-:root[data-theme="dark"] .aisle[data-rayon="fruits"]     {--ray:#7EC98C;--ray-soft:#1B2E1E}
-:root[data-theme="dark"] .aisle[data-rayon="boucherie"]  {--ray:#EB8E84;--ray-soft:#33201D}
-:root[data-theme="dark"] .aisle[data-rayon="cremerie"]   {--ray:#E0BC5E;--ray-soft:#312716}
-:root[data-theme="dark"] .aisle[data-rayon="boulangerie"]{--ray:#D8A56C;--ray-soft:#2F2419}
-:root[data-theme="dark"] .aisle[data-rayon="epicerie"]   {--ray:#B5C46C;--ray-soft:#272B17}
-:root[data-theme="dark"] .aisle[data-rayon="sucre"]      {--ray:#DE8FBB;--ray-soft:#311F2A}
-:root[data-theme="dark"] .aisle[data-rayon="surgeles"]   {--ray:#79BBD6;--ray-soft:#17282F}
-:root[data-theme="dark"] .aisle[data-rayon="boissons"]   {--ray:#A0A0E0;--ray-soft:#20203A}
-:root[data-theme="dark"] .aisle[data-rayon="maison"]     {--ray:#7CC2BE;--ray-soft:#182B2A}
-:root[data-theme="dark"] .aisle[data-rayon="divers"]     {--ray:#C2AE96;--ray-soft:#2E2419}
+:root[data-theme="dark"] [data-swatch]        {--ray:#C2AE96;--ray-soft:#2E2419}
+:root[data-theme="dark"] [data-swatch="leaf"] {--ray:#7EC98C;--ray-soft:#1B2E1E}
+:root[data-theme="dark"] [data-swatch="rose"] {--ray:#EB8E84;--ray-soft:#33201D}
+:root[data-theme="dark"] [data-swatch="amber"]{--ray:#E0BC5E;--ray-soft:#312716}
+:root[data-theme="dark"] [data-swatch="crust"]{--ray:#D8A56C;--ray-soft:#2F2419}
+:root[data-theme="dark"] [data-swatch="olive"]{--ray:#B5C46C;--ray-soft:#272B17}
+:root[data-theme="dark"] [data-swatch="berry"]{--ray:#DE8FBB;--ray-soft:#311F2A}
+:root[data-theme="dark"] [data-swatch="ice"]  {--ray:#79BBD6;--ray-soft:#17282F}
+:root[data-theme="dark"] [data-swatch="indigo"]{--ray:#A0A0E0;--ray-soft:#20203A}
+:root[data-theme="dark"] [data-swatch="teal"] {--ray:#7CC2BE;--ray-soft:#182B2A}
+:root[data-theme="dark"] [data-swatch="stone"]{--ray:#C2AE96;--ray-soft:#2E2419}
 
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -570,6 +571,79 @@ button{cursor:pointer;background:none;border:none;padding:0}
   max-width:calc(100% - 32px);text-align:center;
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px)}
+
+/* ---------- pastilles de filtre (catégories) ---------- */
+.filters{
+  display:flex;gap:7px;overflow-x:auto;margin:0 -18px 14px;padding:2px 18px 8px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;
+}
+.filters::-webkit-scrollbar{display:none}
+.filters:empty{display:none}
+.chip{
+  flex:none;border-radius:999px;padding:7px 14px;font-size:13.5px;font-weight:500;
+  background:var(--surface);color:var(--muted);box-shadow:inset 0 0 0 1px var(--line-strong);
+  display:inline-flex;align-items:center;gap:7px;white-space:nowrap;transition:.12s;
+}
+.chip:hover{color:var(--ink)}
+.chip .n{font-family:"DM Mono",ui-monospace,monospace;font-size:11.5px;opacity:.65}
+.chip[aria-pressed="true"]{background:var(--accent);color:#FFFCF7;box-shadow:none;font-weight:700}
+.chip[aria-pressed="true"] .n{opacity:.8}
+:root[data-theme="dark"] .chip[aria-pressed="true"],
+:root:not([data-theme="light"]) .chip[aria-pressed="true"]{color:#10231A}
+
+/* barre de recherche sans bouton d'envoi */
+.addbar.plain form{padding:5px 8px 5px 16px}
+.addbar .clr{
+  width:32px;height:32px;flex:none;border-radius:50%;display:grid;place-items:center;
+  color:var(--muted);font-size:20px;line-height:1;
+}
+.addbar .clr:hover{background:var(--surface-2);color:var(--ink)}
+
+/* ---------- groupes de recettes ---------- */
+.grouphead{display:flex;align-items:center;gap:10px;margin:10px 2px 0}
+.grouphead:first-child{margin-top:0}
+.grouphead h3{
+  font-family:"Bricolage Grotesque",sans-serif;font-size:15px;font-weight:700;margin:0;
+  letter-spacing:-.015em;color:var(--ink);
+}
+.grouphead .rule{flex:1;height:2px;border-radius:2px;background:var(--line)}
+.grouphead .n{
+  font-family:"DM Mono",ui-monospace,monospace;font-size:11.5px;color:var(--muted);
+  background:var(--surface-2);border-radius:999px;padding:2px 9px;
+}
+
+/* ---------- pied de la liste de courses ---------- */
+.listfoot{display:flex;justify-content:center;margin:4px 0 0}
+
+/* ---------- gestion des rayons ---------- */
+.rayons{list-style:none;margin:0;padding:0}
+.rayonrow{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:13px}
+.rayonrow:nth-child(odd){background:var(--surface-2)}
+.rayonrow .pic{
+  width:34px;height:34px;flex:none;border-radius:12px;background:var(--ray-soft);
+  display:grid;place-items:center;font-size:17px;line-height:1;
+}
+.rayonrow .nm{
+  flex:1;min-width:0;font-size:15.5px;font-weight:700;color:var(--ray);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;
+}
+.rayonrow .nm small{display:block;font-size:11.5px;font-weight:400;color:var(--muted)}
+.rayonrow .mv{width:36px;height:36px;flex:none;border-radius:11px;display:grid;place-items:center;color:var(--muted)}
+.rayonrow .mv:hover{background:var(--surface);color:var(--accent)}
+.rayonrow .mv[disabled]{opacity:.22;pointer-events:none}
+.rayonrow .mv svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.swatches{display:flex;flex-wrap:wrap;gap:9px}
+.swatch{
+  width:36px;height:36px;border-radius:12px;background:var(--ray);
+  box-shadow:inset 0 0 0 2px var(--surface);transition:.12s;
+}
+.swatch:hover{transform:scale(1.06)}
+.swatch[aria-pressed="true"]{box-shadow:inset 0 0 0 2px var(--surface), 0 0 0 2.5px var(--ray)}
+.picrow{display:flex;gap:9px;align-items:flex-start}
+.picrow .field{margin-bottom:0}
+.picrow .field.pic{width:76px;flex:none}
+.picrow .field.pic input{text-align:center;font-size:20px}
+.picrow .field.nm{flex:1;min-width:0}
 </style>
 
 <div class="app">
@@ -586,6 +660,14 @@ button{cursor:pointer;background:none;border:none;padding:0}
   </header>
 
   <section class="view active" id="view-recipes">
+    <div class="addbar plain">
+      <form id="findForm" autocomplete="off">
+        <svg class="mag" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="findInput" placeholder="Chercher une recette, un ingrédient…" aria-label="Chercher une recette">
+        <button class="clr" type="button" data-act="find-clear" id="findClear" aria-label="Effacer la recherche" hidden>×</button>
+      </form>
+    </div>
+    <div class="filters" id="catFilters"></div>
     <ul class="recipes" id="recipeList"></ul>
   </section>
 
@@ -631,27 +713,132 @@ button{cursor:pointer;background:none;border:none;padding:0}
 /* ---------------------------------------------------------------
    Rayons : l'ordre est celui d'un parcours de magasin classique.
 --------------------------------------------------------------- */
-const RAYONS = [
-  ["fruits",      "Fruits & légumes",         "🥬"],
-  ["boucherie",   "Boucherie & poissonnerie", "🥩"],
-  ["cremerie",    "Crémerie & œufs",          "🧀"],
-  ["boulangerie", "Boulangerie",              "🥖"],
-  ["epicerie",    "Épicerie salée",           "🥫"],
-  ["sucre",       "Épicerie sucrée",          "🍫"],
-  ["surgeles",    "Surgelés",                 "🧊"],
-  ["boissons",    "Boissons",                 "🥤"],
-  ["maison",      "Entretien & maison",       "🧽"],
-  ["divers",      "Divers",                   "🧺"]
+const RAYONS_DEFAUT = [
+  ["fruits",      "Fruits & légumes",         "🥬", "leaf"],
+  ["boucherie",   "Boucherie & poissonnerie", "🥩", "rose"],
+  ["cremerie",    "Crémerie & œufs",          "🧀", "amber"],
+  ["boulangerie", "Boulangerie",              "🥖", "crust"],
+  ["epicerie",    "Épicerie salée",           "🥫", "olive"],
+  ["sucre",       "Épicerie sucrée",          "🍫", "berry"],
+  ["surgeles",    "Surgelés",                 "🧊", "ice"],
+  ["boissons",    "Boissons",                 "🥤", "indigo"],
+  ["maison",      "Entretien & maison",       "🧽", "teal"],
+  ["divers",      "Divers",                   "🧺", "stone"]
 ];
-const RAYON_NAME = Object.fromEntries(RAYONS.map(r => [r[0], r[1]]));
-const RAYON_PIC  = Object.fromEntries(RAYONS.map(r => [r[0], r[2]]));
+const RAYONS_DEFAUT_CLES = new Set(RAYONS_DEFAUT.map(r => r[0]));
+
+/* Les dix teintes proposées à la création d'un rayon. Chacune a sa
+   déclinaison claire et sombre dans la feuille de style. */
+const NUANCES = [
+  ["leaf","Vert"], ["rose","Rose"], ["amber","Ambre"], ["crust","Pain"], ["olive","Olive"],
+  ["berry","Prune"], ["ice","Glacier"], ["indigo","Indigo"], ["teal","Sarcelle"], ["stone","Pierre"]
+];
 
 /* Un pictogramme par catégorie de recette, pour que la tuile se repère
-   d'un coup d'œil sans lire l'étiquette. */
+   d'un coup d'œil sans lire l'étiquette. Les catégories étant libres,
+   celles que vous inventez retombent sur le couvert. */
 const CAT_PIC = {
   "Plat":"🍲", "Entrée":"🥗", "Dessert":"🍰",
-  "Petit-déj":"🥐", "Apéro":"🍷", "Accompagnement":"🥘"
+  "Petit-déj":"🥐", "Apéro":"🍷", "Accompagnement":"🥘",
+  "Soupe":"🥣", "Salade":"🥗", "Goûter":"🍪", "Boisson":"🍹"
 };
+const CAT_PIC_DEFAUT = "🍴";
+const SANS_CAT = "Sans catégorie";
+function catPic(cat){ return CAT_PIC[cat] || CAT_PIC_DEFAUT; }
+
+/* ---------------------------------------------------------------
+   Rayons : les dix rayons ci-dessus sont les valeurs par défaut. La
+   collection « rayons » ne stocke que les écarts — un document dont
+   l'identifiant est celui d'un rayon par défaut le retouche (nom,
+   pictogramme, teinte, rang), un document au nouvel identifiant est
+   un rayon que vous avez ajouté.
+--------------------------------------------------------------- */
+function rayonList(){
+  const out = [];
+  RAYONS_DEFAUT.forEach(([key, name, pic, swatch], i)=>{
+    const o = state.rayons.get(key) || {};
+    out.push({
+      key, custom:false,
+      name:   o.name || name,
+      pic:    o.pic != null ? o.pic : pic,
+      swatch: o.swatch || swatch,
+      order:  o.order != null ? o.order : i * 100,
+      touched: !!(o.name || o.pic != null || o.swatch || o.order != null)
+    });
+  });
+  for(const [key, o] of state.rayons){
+    if(RAYONS_DEFAUT_CLES.has(key)) continue;
+    out.push({
+      key, custom:true,
+      name:   o.name || key,
+      pic:    o.pic || "",
+      swatch: o.swatch || "stone",
+      order:  o.order != null ? o.order : 9000,
+      touched: true
+    });
+  }
+  out.sort((a,b)=> a.order - b.order || a.name.localeCompare(b.name, "fr"));
+  return out;
+}
+function rayonMap(){ return new Map(rayonList().map(d => [d.key, d])); }
+function rayonDef(key){ return rayonMap().get(key) || null; }
+function rayonName(key){ const d = rayonDef(key); return d ? d.name : "Divers"; }
+
+/* Réécrit le rang de chaque rayon d'après sa position dans la liste
+   donnée : un seul document par rayon déplacé. */
+async function saveRayonOrder(defs){
+  for(let i = 0; i < defs.length; i++){
+    const d = defs[i];
+    const cur = state.rayons.get(d.key);
+    if(cur && cur.order === i * 100) continue;
+    if(!cur && d.order === i * 100) continue;
+    await save("rayons", d.key, Object.assign({}, cur || {}, {order:i * 100}));
+  }
+}
+async function moveRayon(key, dir){
+  const defs = rayonList();
+  const i = defs.findIndex(d => d.key === key);
+  const j = i + dir;
+  if(i < 0 || j < 0 || j >= defs.length) return;
+  defs.splice(j, 0, defs.splice(i, 1)[0]);
+  await saveRayonOrder(defs);
+}
+async function saveRayon(key, name, pic, swatch){
+  name = (name || "").trim();
+  if(!name) return null;
+  if(!key){
+    const base = slug(name);
+    const taken = new Set([...RAYONS_DEFAUT_CLES, ...state.rayons.keys()]);
+    key = base;
+    while(taken.has(key)) key = base + "-" + Math.random().toString(36).slice(2, 5);
+    const defs = rayonList();
+    const at = defs.findIndex(d => d.key === "divers");
+    const pos = at >= 0 ? at : defs.length;
+    await save("rayons", key, {name, pic, swatch, custom:true, order:pos * 100, createdAt:Date.now()});
+    const next = rayonList().filter(d => d.key !== key);
+    next.splice(pos, 0, {key, name, pic, swatch, custom:true, order:pos * 100});
+    await saveRayonOrder(next);
+    return key;
+  }
+  const cur = state.rayons.get(key) || {};
+  await save("rayons", key, Object.assign({}, cur, {name, pic, swatch}));
+  return key;
+}
+/* Supprimer un rayon ajouté : ce qu'il contenait retombe dans Divers,
+   pour qu'aucun article ni ingrédient ne disparaisse de la liste. */
+async function delRayon(key){
+  if(RAYONS_DEFAUT_CLES.has(key)) return;
+  for(const [id, it] of [...state.shopping]){
+    if(it.rayon === key) await save("shopping", id, Object.assign({}, it, {rayon:"divers"}));
+  }
+  for(const [id, r] of [...state.recipes]){
+    if(!(r.ingredients || []).some(i => i.rayon === key)) continue;
+    await save("recipes", id, Object.assign({}, r, {
+      ingredients: r.ingredients.map(i => i.rayon === key ? Object.assign({}, i, {rayon:"divers"}) : i)
+    }));
+  }
+  await drop("rayons", key);
+}
 
 const GUESS = {
   fruits:["tomate","salade","laitue","roquette","carotte","courgette","aubergine","poireau","oignon","echalote","ail","pomme de terre","patate","champignon","brocoli","chou","haricot vert","epinard","poivron","concombre","radis","navet","celeri","potiron","courge","butternut","betterave","fenouil","citron","orange","clementine","pomme","poire","banane","fraise","framboise","myrtille","raisin","peche","abricot","melon","pasteque","kiwi","ananas","mangue","avocat","persil","basilic","coriandre","menthe","ciboulette","thym","romarin","laurier","gingembre","petit pois frais","asperge","artichaut","endive","mache","cresson","rhubarbe","figue","prune","cerise"],
@@ -757,12 +944,13 @@ function toast(msg){
    Hors ligne, les écritures s'empilent dans une file et repartent au retour
    du réseau. Chaque document porte un updatedAt : le plus récent gagne.
 --------------------------------------------------------------------- */
-const COLS = ["recipes","shopping","plan"];
+const COLS = ["recipes","shopping","plan","rayons"];
 const LS_DATA = "panier.data.v1";
 const LS_CFG  = "panier.foyer.v1";
-const state = { recipes:new Map(), shopping:new Map(), plan:new Map(), tab:"recipes", editing:null, ready:false };
+const state = { recipes:new Map(), shopping:new Map(), plan:new Map(), rayons:new Map(),
+                tab:"recipes", editing:null, ready:false, find:"", cat:"" };
 
-let localData = {recipes:{}, shopping:{}, plan:{}};
+let localData = {recipes:{}, shopping:{}, plan:{}, rayons:{}};
 let queue = [];
 let cfg = {url:"", code:""};
 let es = null, esState = "off", firstSync = false, retryTimer = null;
@@ -775,7 +963,7 @@ function clean(body){
 function loadLocal(){
   try{
     const raw = JSON.parse(localStorage.getItem(LS_DATA) || "null");
-    if(raw && raw.data){ localData = Object.assign({recipes:{},shopping:{},plan:{}}, raw.data); queue = raw.queue || []; }
+    if(raw && raw.data){ localData = Object.assign({recipes:{},shopping:{},plan:{},rayons:{}}, raw.data); queue = raw.queue || []; }
   }catch(e){}
   try{ cfg = JSON.parse(localStorage.getItem(LS_CFG) || "null") || cfg; }catch(e){}
   const cutoff = Date.now() - 30*24*3600*1000;
@@ -1016,7 +1204,8 @@ function renderHead(){
   const acts = $("#headActions");
   if(state.tab === "recipes"){
     const n = state.recipes.size;
-    count.textContent = n ? n + (n>1 ? " recettes" : " recette") : "";
+    const vu = (state.find || state.cat) ? recipesShown().length : n;
+    count.textContent = !n ? "" : ((state.find || state.cat) ? vu + " sur " + n : n + (n>1 ? " recettes" : " recette"));
     acts.innerHTML = '<button class="btn btn-primary" data-act="new-recipe"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Recette</button>';
   } else if(state.tab === "list"){
     const undone = [...state.shopping.values()].filter(i=>!i.done).length;
@@ -1032,61 +1221,125 @@ function renderHead(){
   }
 }
 
+function catOf(r){ return ((r && r.category) || "").trim() || SANS_CAT; }
+function knownCats(){
+  const out = new Set(CATEGORIES);
+  for(const r of state.recipes.values()){
+    const c = (r.category || "").trim();
+    if(c) out.add(c);
+  }
+  return [...out].sort((a,b)=> a.localeCompare(b, "fr"));
+}
+/* Recettes retenues par la recherche : nom, catégorie ou ingrédient. */
+function recipesFound(){
+  const all = [...state.recipes.values()].sort((a,b)=>(a.name||"").localeCompare(b.name||"","fr"));
+  const q = norm(state.find);
+  if(!q) return all;
+  return all.filter(r =>
+    norm(r.name).includes(q) ||
+    norm(r.category || "").includes(q) ||
+    (r.ingredients || []).some(i => norm(i.name).includes(q)));
+}
+function recipesShown(){
+  const found = recipesFound();
+  return state.cat ? found.filter(r => catOf(r) === state.cat) : found;
+}
+
+function tileHTML(r, groupé){
+  const meta = [];
+  if(r.category && !groupé) meta.push('<span class="cat">' + catPic(catOf(r)) + ' ' + esc(r.category) + '</span>');
+  if(r.servings) meta.push('<span class="num">' + esc(r.servings) + ' pers.</span>');
+  if(r.minutes) meta.push('<span class="num">' + esc(r.minutes) + ' min</span>');
+  meta.push('<span>' + ((r.ingredients||[]).length) + ' ingr.</span>');
+  for(let i = meta.length - 1; i > 1; i--) meta.splice(i, 0, '<span class="dot"></span>');
+  return '<li class="tile" data-inlist="' + (r.inList ? 1 : 0) + '">' +
+    '<button class="tile-open" data-act="open-recipe" data-id="' + esc(r.id) + '">' +
+      '<h3 class="tile-name">' + esc(r.name) + '</h3>' +
+      '<div class="tile-meta">' + meta.join("") + '</div>' +
+    '</button>' +
+    '<button class="tile-check" data-act="toggle-recipe" data-id="' + esc(r.id) + '" aria-pressed="' + (r.inList?"true":"false") + '" aria-label="Ajouter les ingrédients aux courses">' +
+      '<span class="box">' + ICON_CHECK + '</span>' + (r.inList ? "dans<br>la liste" : "aux<br>courses") +
+    '</button></li>';
+}
+
 function renderRecipes(){
   const ul = $("#recipeList");
-  const recipes = [...state.recipes.values()].sort((a,b)=>(a.name||"").localeCompare(b.name||"","fr"));
-  if(!recipes.length){
+  const box = $("#catFilters");
+  const total = state.recipes.size;
+  const found = recipesFound();
+
+  /* pastilles de catégorie, comptées sur le résultat de la recherche */
+  const counts = new Map();
+  for(const r of found) counts.set(catOf(r), (counts.get(catOf(r)) || 0) + 1);
+  if(state.cat && !counts.has(state.cat)) state.cat = "";
+  const cats = [...counts.keys()].sort((a,b)=> a.localeCompare(b, "fr"));
+  box.innerHTML = (total < 2 || (cats.length < 2 && !state.cat)) ? "" :
+    '<button class="chip" data-act="cat-filter" data-cat="" aria-pressed="' + (state.cat ? "false" : "true") + '">' +
+      'Toutes<span class="n">' + found.length + '</span></button>' +
+    cats.map(c => '<button class="chip" data-act="cat-filter" data-cat="' + esc(c) + '" aria-pressed="' + (state.cat === c ? "true" : "false") + '">' +
+      catPic(c) + ' ' + esc(c) + '<span class="n">' + counts.get(c) + '</span></button>').join("");
+
+  if(!total){
     ul.innerHTML = '<li>' + (state.ready
       ? '<div class="empty"><span class="pic" aria-hidden="true">📖</span><strong>Aucune recette pour l’instant</strong>Touchez « Recette » en haut pour écrire la première : ses ingrédients partiront ensuite dans les courses en un geste.</div>'
       : '<div class="empty">Chargement…</div>') + '</li>';
     return;
   }
-  ul.innerHTML = recipes.map(r=>{
-    const meta = [];
-    if(r.category) meta.push('<span class="cat">' + (CAT_PIC[r.category] ? CAT_PIC[r.category] + " " : "") + esc(r.category) + '</span>');
-    if(r.servings) meta.push('<span class="num">' + esc(r.servings) + ' pers.</span>');
-    if(r.minutes) meta.push('<span class="num">' + esc(r.minutes) + ' min</span>');
-    meta.push('<span>' + ((r.ingredients||[]).length) + ' ingr.</span>');
-    for(let i = meta.length - 1; i > 1; i--) meta.splice(i, 0, '<span class="dot"></span>');
-    return '<li class="tile" data-inlist="' + (r.inList ? 1 : 0) + '">' +
-      '<button class="tile-open" data-act="open-recipe" data-id="' + esc(r.id) + '">' +
-        '<h3 class="tile-name">' + esc(r.name) + '</h3>' +
-        '<div class="tile-meta">' + meta.join("") + '</div>' +
-      '</button>' +
-      '<button class="tile-check" data-act="toggle-recipe" data-id="' + esc(r.id) + '" aria-pressed="' + (r.inList?"true":"false") + '" aria-label="Ajouter les ingrédients aux courses">' +
-        '<span class="box">' + ICON_CHECK + '</span>' + (r.inList ? "dans<br>la liste" : "aux<br>courses") +
-      '</button></li>';
-  }).join("");
+  const shown = recipesShown();
+  if(!shown.length){
+    ul.innerHTML = '<li><div class="empty"><span class="pic" aria-hidden="true">🔍</span><strong>Rien ne correspond</strong>' +
+      'Aucune recette ne répond à cette recherche. Essayez un autre mot, ou le nom d’un ingrédient.</div></li>';
+    return;
+  }
+  /* groupé par catégorie tant qu'aucune n'est sélectionnée */
+  if(state.cat || cats.length < 2){
+    ul.innerHTML = shown.map(r => tileHTML(r, false)).join("");
+    return;
+  }
+  let html = "";
+  for(const c of cats){
+    const list = shown.filter(r => catOf(r) === c);
+    if(!list.length) continue;
+    html += '<li class="grouphead"><h3>' + catPic(c) + ' ' + esc(c) + '</h3>' +
+            '<span class="rule"></span><span class="n">' + list.length + '</span></li>' +
+            list.map(r => tileHTML(r, true)).join("");
+  }
+  ul.innerHTML = html;
 }
 
 function renderList(){
   const wrap = $("#shopList");
   const items = [...state.shopping.values()];
+  const defs = rayonList();
+  const byKey = new Map(defs.map(d => [d.key, d]));
+  const foot = '<div class="listfoot"><button class="btn" data-act="rayons">' +
+    '<svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Gérer les rayons</button></div>';
   if(!items.length){
-    wrap.innerHTML = state.ready
+    wrap.innerHTML = (state.ready
       ? '<div class="empty"><span class="pic" aria-hidden="true">🧺</span><strong>Liste vide</strong>Tapez ce qu’il vous faut dans la barre ci-dessus — « 2 kg pommes de terre », « 6 œufs » — ou cochez une recette dans l’onglet Recettes.</div>'
-      : '<div class="empty">Chargement…</div>';
+      : '<div class="empty">Chargement…</div>') + foot;
     return;
   }
   const byRayon = new Map();
   for(const it of items){
-    const r = RAYON_NAME[it.rayon] ? it.rayon : "divers";
+    const r = byKey.has(it.rayon) ? it.rayon : "divers";
     if(!byRayon.has(r)) byRayon.set(r, []);
     byRayon.get(r).push(it);
   }
   let html = "";
-  for(const [key, label] of RAYONS){
-    const list = byRayon.get(key);
+  for(const def of defs){
+    const list = byRayon.get(def.key);
     if(!list) continue;
     list.sort((a,b)=> (a.done?1:0)-(b.done?1:0) || (a.name||"").localeCompare(b.name||"","fr"));
     const left = list.filter(i=>!i.done).length;
-    html += '<section class="aisle" data-rayon="' + esc(key) + '">' +
-            '<div class="aisle-head"><span class="pic" aria-hidden="true">' + (RAYON_PIC[key] || "") + '</span>' +
-            '<h3>' + esc(label) + '</h3><span class="rule"></span>' +
+    html += '<section class="aisle" data-swatch="' + esc(def.swatch) + '">' +
+            '<div class="aisle-head"><span class="pic" aria-hidden="true">' + esc(def.pic || "") + '</span>' +
+            '<h3>' + esc(def.name) + '</h3><span class="rule"></span>' +
             '<span class="n">' + left + "/" + list.length + '</span></div><ul class="items">';
     for(const it of list){
       const total = itemTotal(it);
       const from = itemFrom(it);
+      const rk = byKey.has(it.rayon) ? it.rayon : "divers";
       html += '<li class="item' + (state.editing === it.id ? " editing" : "") + '" data-done="' + (it.done?1:0) + '" data-id="' + esc(it.id) + '">' +
         '<div class="item-row">' +
           '<button class="tick" data-act="tick" data-id="' + esc(it.id) + '" aria-pressed="' + (it.done?"true":"false") + '" aria-label="Cocher ' + esc(it.name) + '">' + ICON_CHECK + '</button>' +
@@ -1100,14 +1353,14 @@ function renderList(){
           '<input type="number" step="any" min="0" name="qty" value="' + (total!=null?esc(total):"") + '" data-id="' + esc(it.id) + '" aria-label="Quantité" placeholder="qté">' +
           '<input name="unit" value="' + esc(it.unit||"") + '" data-id="' + esc(it.id) + '" aria-label="Unité" placeholder="unité">' +
           '<select name="rayon" data-id="' + esc(it.id) + '" aria-label="Rayon">' +
-            RAYONS.map(([k,l])=>'<option value="' + k + '"' + (k===(it.rayon||"divers")?" selected":"") + '>' + esc(l) + '</option>').join("") +
+            defs.map(d=>'<option value="' + esc(d.key) + '"' + (d.key===rk?" selected":"") + '>' + esc(d.name) + '</option>').join("") +
           '</select>' +
           '<button class="rm" data-act="remove-item" data-id="' + esc(it.id) + '">Supprimer</button>' +
         '</div></li>';
     }
     html += "</ul></section>";
   }
-  wrap.innerHTML = html;
+  wrap.innerHTML = html + foot;
 }
 
 function renderWeek(){
@@ -1179,7 +1432,9 @@ function openNewRecipe(){
     '<form class="sheet-body" id="recipeForm">' +
       '<div class="field"><label for="rName">Nom</label><input id="rName" name="name" required placeholder="Gratin de courgettes"></div>' +
       '<div class="row2">' +
-        '<div class="field"><label for="rCat">Catégorie</label><select id="rCat" name="category">' + CATEGORIES.map(c=>'<option>' + c + '</option>').join("") + '</select></div>' +
+        '<div class="field"><label for="rCat">Catégorie</label>' +
+          '<input id="rCat" name="category" list="catList" value="Plat" placeholder="Plat" autocomplete="off">' +
+          '<datalist id="catList">' + knownCats().map(c=>'<option value="' + esc(c) + '"></option>').join("") + '</datalist></div>' +
         '<div class="field"><label for="rServ">Personnes</label><input id="rServ" name="servings" type="number" min="1" max="30" value="4"></div>' +
         '<div class="field"><label for="rMin">Minutes</label><input id="rMin" name="minutes" type="number" min="0" max="999" placeholder="45"></div>' +
       '</div>' +
@@ -1279,6 +1534,74 @@ function openPicker(slotId){
   );
 }
 
+
+/* --------------------------- feuille des rayons --------------------------- */
+function openRayons(){
+  const defs = rayonList();
+  const byKey = new Map(defs.map(d => [d.key, d]));
+  const counts = new Map();
+  for(const it of state.shopping.values()){
+    const k = byKey.has(it.rayon) ? it.rayon : "divers";
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  const rows = defs.map((d, i)=>{
+    const n = counts.get(d.key) || 0;
+    const sub = (n ? n + (n > 1 ? " articles" : " article") : "vide") + (d.custom ? " · ajouté par vous" : "");
+    return '<li class="rayonrow" data-swatch="' + esc(d.swatch) + '">' +
+      '<span class="pic" aria-hidden="true">' + esc(d.pic || "") + '</span>' +
+      '<button class="nm" data-act="rayon-edit" data-id="' + esc(d.key) + '">' + esc(d.name) +
+        '<small>' + esc(sub) + '</small></button>' +
+      '<button class="mv" data-act="rayon-up" data-id="' + esc(d.key) + '" aria-label="Monter ' + esc(d.name) + '"' + (i === 0 ? " disabled" : "") + '>' +
+        '<svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg></button>' +
+      '<button class="mv" data-act="rayon-down" data-id="' + esc(d.key) + '" aria-label="Descendre ' + esc(d.name) + '"' + (i === defs.length - 1 ? " disabled" : "") + '>' +
+        '<svg viewBox="0 0 24 24"><path d="M6 10l6 6 6-6"/></svg></button>' +
+    '</li>';
+  }).join("");
+  openSheet(
+    '<div class="sheet-head"><h2>Rayons</h2>' + CLOSE_BTN + '</div>' +
+    '<div class="sheet-body">' +
+      '<p class="syncstate">L’ordre de cette liste est celui de votre magasin : la liste de courses s’y range toute seule. Touchez un rayon pour le renommer, changer son icône ou sa couleur.</p>' +
+      '<ul class="rayons">' + rows + '</ul>' +
+      '<p class="note">Les dix rayons d’origine devinent le rayon d’un article d’après son nom. Ceux que vous ajoutez se choisissent à la main, en touchant un article de la liste.</p>' +
+    '</div>' +
+    '<div class="sheet-foot"><button class="btn btn-primary wide" data-act="rayon-new">' +
+      '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Ajouter un rayon</button></div>'
+  );
+}
+function openRayonForm(key){
+  const d = key ? rayonDef(key) : null;
+  const swatch = d ? d.swatch : "leaf";
+  openSheet(
+    '<div class="sheet-head"><h2>' + (d ? esc(d.name) : "Nouveau rayon") + '</h2>' + CLOSE_BTN + '</div>' +
+    '<form class="sheet-body" id="rayonForm" onsubmit="return false">' +
+      '<input type="hidden" id="rKey" value="' + esc(key || "") + '">' +
+      '<div class="picrow">' +
+        '<div class="field pic"><label for="rPic">Icône</label>' +
+          '<input id="rPic" maxlength="4" value="' + esc(d ? d.pic : "") + '" placeholder="🥕" aria-label="Icône du rayon"></div>' +
+        '<div class="field nm"><label for="rNom">Nom</label>' +
+          '<input id="rNom" value="' + esc(d ? d.name : "") + '" placeholder="Marché du samedi" required></div>' +
+      '</div>' +
+      '<div class="field" style="margin-top:18px"><label>Couleur</label>' +
+        '<div class="swatches" id="rSwatches">' +
+          NUANCES.map(([k, label])=>'<button type="button" class="swatch" data-swatch="' + k + '" data-act="swatch" data-id="' + k + '" ' +
+            'aria-pressed="' + (k === swatch ? "true" : "false") + '" aria-label="' + esc(label) + '" title="' + esc(label) + '"></button>').join("") +
+        '</div>' +
+        '<input type="hidden" id="rSwatch" value="' + esc(swatch) + '">' +
+        '<div class="hint">La couleur habille l’en-tête du rayon, son rail et ses quantités dans la liste de courses.</div>' +
+      '</div>' +
+      (d && d.custom
+        ? '<div class="field"><button type="button" class="btn btn-quiet wide" data-act="rayon-del" data-id="' + esc(d.key) + '">Supprimer ce rayon</button>' +
+          '<div class="hint">Ce qu’il contenait repassera dans Divers : rien n’est perdu.</div></div>'
+        : "") +
+      (d && !d.custom && d.touched
+        ? '<div class="field"><button type="button" class="btn btn-quiet wide" data-act="rayon-reset" data-id="' + esc(d.key) + '">Rétablir le rayon d’origine</button></div>'
+        : "") +
+    '</form>' +
+    '<div class="sheet-foot"><button class="btn" data-act="rayons">Retour</button>' +
+    '<button class="btn btn-primary" data-act="rayon-save">Enregistrer</button></div>'
+  );
+}
+
 /* --------------------------- barre de recherche --------------------------- */
 function catalog(){
   const out = new Map();
@@ -1300,14 +1623,14 @@ function refreshAddBar(){
   if(p.name){
     parsed.hidden = false;
     parsed.innerHTML = (p.qty!=null ? '<b>' + esc(fmtQty(p.qty) + (p.unit ? " " + p.unit : "")) + '</b>' : '<b>1</b>') +
-      '<span>' + esc(p.name) + '</span><span class="ray">→ ' + esc(RAYON_NAME[guessRayon(p.name)]) + '</span>';
+      '<span>' + esc(p.name) + '</span><span class="ray">→ ' + esc(rayonName(guessRayon(p.name))) + '</span>';
   } else parsed.hidden = true;
   const q = norm(p.name);
   const hits = q.length >= 2 ? catalog().filter(c=>norm(c.name).includes(q)).slice(0,6) : [];
   if(!hits.length){ sug.hidden = true; return; }
   sug.hidden = false;
   sug.innerHTML = hits.map(c=>'<button type="button" data-act="suggest" data-name="' + esc(c.name) + '" data-rayon="' + esc(c.rayon||"divers") + '" data-unit="' + esc(c.unit||"") + '">' +
-    esc(c.name) + '<span class="r">' + esc(RAYON_NAME[c.rayon]||"Divers") + '</span></button>').join("");
+    esc(c.name) + '<span class="r">' + esc(rayonName(c.rayon)) + '</span></button>').join("");
 }
 
 /* ------------------------------ événements ------------------------------ */
@@ -1479,7 +1802,43 @@ document.addEventListener("click", async (ev)=>{
     toast(n ? n + (n>1 ? " recettes ajoutées aux courses" : " recette ajoutée aux courses") : "Tout est déjà dans la liste");
     return;
   }
+
+  if(act === "cat-filter"){
+    state.cat = btn.dataset.cat || "";
+    renderHead(); renderRecipes();
+    return;
+  }
+  if(act === "find-clear"){
+    $("#findInput").value = ""; state.find = ""; $("#findClear").hidden = true;
+    renderHead(); renderRecipes(); $("#findInput").focus();
+    return;
+  }
+
+  if(act === "rayons"){ openRayons(); return; }
+  if(act === "rayon-new"){ openRayonForm(null); return; }
+  if(act === "rayon-edit"){ openRayonForm(id); return; }
+  if(act === "swatch"){
+    document.querySelectorAll("#rSwatches .swatch").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.id === id)));
+    const f = document.getElementById("rSwatch");
+    if(f) f.value = id;
+    return;
+  }
+  if(act === "rayon-save"){
+    const key = document.getElementById("rKey").value;
+    const nom = document.getElementById("rNom");
+    if(!nom.value.trim()){ nom.focus(); toast("Il manque le nom du rayon."); return; }
+    await saveRayon(key || null, nom.value, document.getElementById("rPic").value.trim(), document.getElementById("rSwatch").value);
+    const name = nom.value.trim();
+    openRayons();
+    toast(key ? "« " + name + " » modifié" : "« " + name + " » ajouté");
+    return;
+  }
+  if(act === "rayon-del"){ await delRayon(id); openRayons(); toast("Rayon supprimé"); return; }
+  if(act === "rayon-reset"){ await drop("rayons", id); openRayons(); toast("Rayon d’origine rétabli"); return; }
+  if(act === "rayon-up"){ await moveRayon(id, -1); openRayons(); return; }
+  if(act === "rayon-down"){ await moveRayon(id, 1); openRayons(); return; }
 });
+
 
 document.addEventListener("change", async (ev)=>{
   const el = ev.target;
@@ -1510,6 +1869,13 @@ $("#addForm").addEventListener("submit", async (ev)=>{
   $("#addInput").value = ""; refreshAddBar();
 });
 $("#addInput").addEventListener("input", refreshAddBar);
+
+$("#findForm").addEventListener("submit", ev=>{ ev.preventDefault(); $("#findInput").blur(); });
+$("#findInput").addEventListener("input", ()=>{
+  state.find = $("#findInput").value;
+  $("#findClear").hidden = !state.find.trim();
+  renderHead(); renderRecipes();
+});
 
 document.querySelectorAll(".tab").forEach(tab=>{
   tab.addEventListener("click", ()=>{
