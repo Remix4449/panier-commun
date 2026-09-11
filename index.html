@@ -334,6 +334,15 @@ button{cursor:pointer;background:none;border:none;padding:0}
   background:var(--surface);border:1px solid var(--line);border-radius:8px;
   padding:9px 11px;margin:7px 0 0;overflow-x:auto;
 }
+.testout{
+  font-size:13px;line-height:1.5;border-radius:10px;padding:10px 12px;margin:-4px 0 16px;
+  border:1px solid var(--line-strong);background:var(--surface-2);color:var(--muted);
+  word-break:break-word;
+}
+.testout.ok{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink)}
+.testout.ko{border-color:var(--danger);color:var(--danger);background:var(--surface-2)}
+.testout b{display:block;margin-bottom:3px;color:inherit}
+.testout code{font-family:"DM Mono",ui-monospace,monospace;font-size:12px}
 .codewrap{display:flex;gap:8px}
 .codewrap input{flex:1;min-width:0}
 .wide{width:100%;justify-content:center}
@@ -1099,9 +1108,11 @@ function openSyncSheet(){
         '<div class="codewrap"><input id="dbCode" placeholder="12 caractères minimum" value="' + esc(cfg.code||"") + '">' +
         '<button class="btn" data-act="gen-code">Tirer</button></div>' +
         '<div class="hint">C\'est le secret partagé entre vos deux téléphones. Il doit être identique des deux côtés — le lien d\'invitation s\'en charge.</div></div>' +
+      '<div class="testout" id="syncTest" hidden></div>' +
     '</div>' +
     '<div class="sheet-foot">' +
-      (linked ? '<button class="btn btn-quiet" data-act="leave-foyer">Quitter le foyer</button>' : '') +
+      '<button class="btn" data-act="test-sync">Tester</button>' +
+      (linked ? '<button class="btn btn-quiet" data-act="leave-foyer">Quitter</button>' : '') +
       '<button class="btn btn-primary" data-act="save-sync">Enregistrer</button>' +
     '</div>'
   );
@@ -1165,6 +1176,47 @@ document.addEventListener("click", async (ev)=>{
 
   if(act === "sync"){ openSyncSheet(); return; }
   if(act === "gen-code"){ document.getElementById("dbCode").value = makeCode(); return; }
+  if(act === "test-sync"){
+    const out = document.getElementById("syncTest");
+    const url = document.getElementById("dbUrl").value.trim().replace(/\/+$/,"");
+    const code = document.getElementById("dbCode").value.trim();
+    const say = (cls, title, detail) => {
+      out.hidden = false; out.className = "testout" + (cls ? " " + cls : "");
+      out.innerHTML = "<b>" + esc(title) + "</b>" + detail;
+    };
+    if(!url){ say("ko", "Adresse manquante", "Collez d\'abord l\'adresse de la base."); return; }
+    if(!/firebasedatabase\.app|firebaseio\.com|localhost|127\./.test(url)){
+      say("ko", "Ce n\'est pas une Realtime Database",
+        "L\'adresse d\'une Realtime Database finit par <code>firebasedatabase.app</code> ou <code>firebaseio.com</code>. Une base <b>Firestore</b> ne convient pas : c\'est un autre produit, sans l\'API utilisée ici. Dans la console Firebase, menu <b>Realtime Database</b> — pas <b>Firestore Database</b>.");
+      return;
+    }
+    say("", "Test en cours…", "");
+    try{
+      const stop = new AbortController();
+      const timer = setTimeout(()=>stop.abort(), 8000);
+      const res = await fetch(url + "/f/" + encodeURIComponent(code || "test") + ".json", {signal:stop.signal});
+      const body = (await res.text()).slice(0, 300);
+      clearTimeout(timer);
+      if(res.ok){
+        say("ok", "Connexion réussie",
+          body === "null"
+            ? "La base répond et le foyer est encore vide — c\'est normal avant le premier ajout. Enregistrez, la pastille doit passer à « Foyer »."
+            : "La base répond et contient déjà des données.");
+      } else if(res.status === 401 || res.status === 403){
+        say("ko", "Lecture refusée par les règles",
+          "La base existe mais refuse l\'accès. Retournez dans l\'onglet <b>Règles</b>, collez exactement celles indiquées plus haut, puis <b>Publier</b>. Vérifiez aussi que le code du foyer fait au moins 12 caractères. Réponse : <code>" + esc(body) + "</code>");
+      } else if(res.status === 404){
+        say("ko", "Adresse introuvable",
+          "Aucune base à cette adresse. Recopiez celle affichée en haut de l\'écran Realtime Database, sans rien ajouter après. Réponse : <code>" + esc(body) + "</code>");
+      } else {
+        say("ko", "Erreur HTTP " + res.status, "<code>" + esc(body) + "</code>");
+      }
+    }catch(e){
+      say("ko", e && e.name === "AbortError" ? "Pas de réponse en 8 secondes" : "Aucune réponse",
+        "L\'adresse ne répond pas : faute de frappe, base supprimée, ou téléphone hors ligne.");
+    }
+    return;
+  }
   if(act === "save-sync"){
     const url = document.getElementById("dbUrl").value.trim().replace(/\/+$/,"");
     const code = document.getElementById("dbCode").value.trim().replace(/[^a-zA-Z0-9_-]/g,"");
