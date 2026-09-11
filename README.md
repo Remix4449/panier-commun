@@ -5,17 +5,37 @@ Une page, aucune dépendance, aucun compte à créer pour s'en servir.
 
 → **https://remix4449.github.io/panier-commun/**
 
-- **Recettes** — tuiles lisibles, fiche complète avec recalcul des quantités
-  selon le nombre de personnes, et une case à cocher sur la tuile qui verse les
-  ingrédients dans la liste de courses (et les retire quand on la décoche, sans
-  toucher à ce qui a été ajouté à la main). La flèche ↓ en haut avale une
-  recette venue d'ailleurs : son texte brut, un lien d'import, ou du JSON.
+- **Recettes** — quarante-cinq recettes du carnet au départ, tuiles lisibles,
+  fiche complète avec recalcul des quantités selon le nombre de personnes, et
+  une case à cocher sur la tuile qui verse les ingrédients dans la liste de
+  courses (et les retire quand on la décoche, sans toucher à ce qui a été
+  ajouté à la main). La flèche ↓ en haut avale une recette venue d'ailleurs :
+  son texte brut, un lien d'import, ou du JSON.
 - **Courses** — triées par rayon dans l'ordre d'un parcours de magasin. La barre
   de recherche comprend la quantité au vol (« 2 kg pommes de terre »), devine le
-  rayon et propose les ingrédients déjà connus. Les quantités d'un même
-  ingrédient venant de plusieurs recettes s'additionnent.
+  rayon et propose les ingrédients déjà connus — dont les deux cent dix-neuf
+  produits du carnet, chacun avec le rayon où il se trouve. Les quantités d'un
+  même ingrédient venant de plusieurs recettes s'additionnent.
 - **Semaine** — midi et soir sur sept jours, et un bouton qui envoie tous les
   repas planifiés dans les courses.
+
+## Le carnet
+
+Les recettes et les produits de départ viennent du carnet tenu dans Notion
+(« Planification de repas » : les bases *Recettes* et *Aliments & Stocks*). Ils
+vivent en dur dans `index.html`, sous `STARTERS` et `PRODUITS` :
+
+- `PRODUITS` liste les aliments du foyer par rayon. La liste de courses s'en
+  sert deux fois — la barre de recherche les propose, et un article qu'on y
+  retrouve est rangé sans passer par la devinette de `GUESS`.
+- `STARTERS` porte les recettes : ingrédients, quantités et étapes. Une
+  quantité absente (`qty: null`) s'affiche « — » : le carnet ne la donnait pas
+  encore. Les catégories reprennent celles du carnet, *Healthy* et *Plaisir*.
+
+À la première ouverture, l'application se garnit toute seule. Sur un téléphone
+déjà en service, le bouton **Importer le carnet** de la feuille de
+synchronisation ajoute les recettes du carnet qui manquent encore, sans toucher
+à celles qui sont déjà là.
 
 ## Ajouter une recette trouvée ailleurs
 

@@ -13,9 +13,10 @@ sans poser de question.**
 
 La recette voyage dans le fragment de l'adresse : elle ne part vers aucun
 serveur, il n'y a rien à configurer, rien à committer, et un seul geste à
-faire côté téléphone. Ne modifie pas `STARTERS` dans `index.html` (ce sont
-les recettes de démonstration du premier lancement), ne demande jamais
-l'adresse de la base Firebase ni le code du foyer.
+faire côté téléphone. Ne touche pas à `STARTERS` dans `index.html` : c'est
+le carnet du foyer reporté depuis Notion, il garnit une installation neuve,
+il n'accueille pas une recette de passage. Ne demande jamais l'adresse de la
+base Firebase ni le code du foyer.
 
 Le geste, en trois temps.
 
@@ -24,7 +25,7 @@ Le geste, en trois temps.
 | champ | type | notes |
 | --- | --- | --- |
 | `name` | texte | obligatoire, le titre tel qu'il s'affichera |
-| `category` | texte | `Plat`, `Entrée`, `Dessert`, `Petit-déj`, `Apéro`, `Accompagnement` |
+| `category` | texte | celle du carnet quand elle colle — `Healthy`, `Plaisir` — sinon `Plat`, `Entrée`, `Dessert`, `Petit-déj`, `Apéro`, `Accompagnement` |
 | `servings` | entier | nombre de personnes de la recette d'origine (1 à 30) |
 | `minutes` | entier | durée totale, en minutes |
 | `ingredients` | liste | `{"name": …, "qty": …, "unit": …}` |
@@ -36,8 +37,8 @@ unité courte et sans point (`g`, `kg`, `ml`, `cl`, `l`, `cs`, `cc`,
 l'ingrédient se compte à l'unité (`{"name":"Œufs","qty":3,"unit":""}`).
 `name` porte l'ingrédient seul, sans article ni préparation : « Lardons
 fumés », pas « 200 g de lardons fumés », pas « oignon émincé ». Omets un
-champ que tu ne connais pas plutôt que d'écrire `null`. Le rayon est deviné
-par l'app, ne le renseigne pas.
+champ que tu ne connais pas plutôt que d'écrire `null`. Le rayon est trouvé
+par l'app (`PRODUITS` d'abord, `GUESS` ensuite), ne le renseigne pas.
 
 **2. Fabriquer le lien.**
 
@@ -97,8 +98,11 @@ souhaitable ici.
   recettes normalisées ; `openRecipeForm(id, brouillon)` les affiche pour
   relecture ; `saveImported()` enregistre sans relecture (bouton « Tout
   ajouter »).
+- `PRODUITS` (les aliments du foyer, par rayon) alimente `PRODUIT_RAYON`,
+  que `guessRayon()` consulte avant ses mots-clés : un ingrédient du carnet
+  est rangé sans devinette.
 - Après toute modification de `index.html`, incrémente `CACHE` dans
-  `sw.js` (`panier-v3` → `panier-v4`) : sans ça, les téléphones déjà
+  `sw.js` (`panier-v4` → `panier-v5`) : sans ça, les téléphones déjà
   installés gardent l'ancienne page dans le cache de la coquille.
 - Le français de l'interface est soigné : phrases complètes, apostrophes
   typographiques (’) dans le texte visible, tutoiement jamais, majuscules
