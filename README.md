@@ -9,7 +9,8 @@ Une page, aucune dépendance, aucun compte à créer pour s'en servir.
   fiche complète avec recalcul des quantités selon le nombre de personnes, et
   une case à cocher sur la tuile qui verse les ingrédients dans la liste de
   courses (et les retire quand on la décoche, sans toucher à ce qui a été
-  ajouté à la main).
+  ajouté à la main). La flèche ↓ en haut avale une recette venue d'ailleurs :
+  son texte brut, un lien d'import, ou du JSON.
 - **Courses** — triées par rayon dans l'ordre d'un parcours de magasin. La barre
   de recherche comprend la quantité au vol (« 2 kg pommes de terre »), devine le
   rayon et propose les ingrédients déjà connus — dont les deux cent dix-neuf
@@ -35,6 +36,22 @@ vivent en dur dans `index.html`, sous `STARTERS` et `PRODUITS` :
 déjà en service, le bouton **Importer le carnet** de la feuille de
 synchronisation ajoute les recettes du carnet qui manquent encore, sans toucher
 à celles qui sont déjà là.
+
+## Ajouter une recette trouvée ailleurs
+
+Le bouton ↓ de l'écran Recettes ouvre une zone où coller ce qu'on a sous la
+main : le texte d'une recette copié sur un site ou sorti d'une conversation,
+un lien d'import, du JSON. L'app en tire titre, nombre de personnes, durée,
+ingrédients — quantités et unités comprises — et étapes, puis affiche la
+fiche pour relecture. Rien n'est enregistré avant d'avoir touché
+« Enregistrer », et réimporter une recette déjà là met la sienne à jour au
+lieu d'en créer une jumelle.
+
+Un lien d'import porte la recette dans le fragment de l'adresse
+(`…/#r=<recette>`), qui ne part vers aucun serveur : un tap ouvre l'app sur
+la fiche pré-remplie. C'est la forme que renvoie Claude quand on lui colle
+une recette dans une session ouverte sur ce dépôt — la marche à suivre est
+dans `CLAUDE.md`, il n'y a rien à lui expliquer à chaque fois.
 
 ## Synchronisation entre deux téléphones
 
@@ -70,6 +87,7 @@ Règles à publier sur la base — le code de foyer est le secret partagé :
 | Fichier | Rôle |
 | --- | --- |
 | `index.html` | toute l'application : styles, markup, logique |
+| `CLAUDE.md` | notes pour Claude, dont la recette → lien d'import |
 | `sw.js` | coquille hors ligne (cache-first, mise à jour en arrière-plan) |
 | `manifest.webmanifest` | installation sur l'écran d'accueil |
 | `icon-*.png` | icônes générées, panier crème sur fond vert |
