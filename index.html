@@ -1461,7 +1461,20 @@ function inviteLink(){
 }
 
 /* --------------------------- liste de courses --------------------------- */
+/* `qtyOverride` : la quantité d'une ligne réécrite à la main dans
+   l'éditeur. Elle remplace le total calculé à l'affichage, mais ne coupe
+   pas le lien avec les recettes qui fournissent la ligne : décocher une
+   recette retire bien ses ingrédients, même ceux dont la quantité a été
+   retouchée. Le champ disparaît dès que les recettes d'une ligne
+   changent, le total repart alors des ingrédients. */
+function hasOverride(it){
+  return !!it && Object.prototype.hasOwnProperty.call(it, "qtyOverride");
+}
 function itemTotal(it){
+  if(hasOverride(it)){
+    const v = it.qtyOverride;
+    return (v==null || isNaN(v)) ? null : Number(v);
+  }
   let total = 0, seen = false;
   if(it.manualQty){ total += Number(it.manualQty)||0; seen = true; }
   for(const v of Object.values(it.sources||{})){
@@ -1474,6 +1487,7 @@ function itemFrom(it){
     const r = state.recipes.get(rid); return r ? r.name : null;
   }).filter(Boolean);
   if(it.manualQty) names.unshift("Ajouté à la volée");
+  if(hasOverride(it) && names.length) names.push("quantité ajustée");
   return names.join(" · ");
 }
 async function addManual(name, qty, unit, rayon){
@@ -1483,7 +1497,12 @@ async function addManual(name, qty, unit, rayon){
   const body = cur ? Object.assign({}, cur) : {name, unit:unit||"", rayon:rayon||guessRayon(name), sources:{}, manualQty:0, done:false, createdAt:Date.now()};
   body.sources = Object.assign({}, body.sources||{});
   const add = (qty==null ? (itemTotal(body)==null ? null : 1) : qty);
-  if(add!=null) body.manualQty = (Number(body.manualQty)||0) + add;
+  if(add!=null){
+    body.manualQty = (Number(body.manualQty)||0) + add;
+    // quantité déjà réécrite à la main : on la complète, sinon l'ajout
+    // resterait invisible derrière la valeur retouchée
+    if(hasOverride(body)) body.qtyOverride = (Number(body.qtyOverride)||0) + add;
+  }
   body.done = false;
   body.name = body.name || name;
   await save("shopping", id, body);
@@ -1497,6 +1516,7 @@ async function recipeToList(recipe, servings){
     const body = cur ? Object.assign({}, cur) : {name:ing.name, unit:ing.unit||"", rayon:ing.rayon||guessRayon(ing.name), sources:{}, manualQty:0, done:false, createdAt:Date.now()};
     body.sources = Object.assign({}, body.sources||{});
     body.sources[recipe.id] = ing.qty==null ? null : Math.round(ing.qty*factor*100)/100;
+    delete body.qtyOverride;
     body.done = false;
     await save("shopping", id, body);
   }
@@ -1507,8 +1527,12 @@ async function recipeOffList(recipe){
     if(!it.sources || !(recipe.id in it.sources)) continue;
     const sources = Object.assign({}, it.sources);
     delete sources[recipe.id];
-    if(Object.keys(sources).length === 0 && !it.manualQty) await drop("shopping", id);
-    else await save("shopping", id, Object.assign({}, it, {sources}));
+    // plus aucune recette derrière la ligne, et rien d'ajouté à la volée :
+    // elle quitte la liste, quantité retouchée ou non
+    if(Object.keys(sources).length === 0 && !it.manualQty){ await drop("shopping", id); continue; }
+    const reste = Object.assign({}, it, {sources});
+    delete reste.qtyOverride;
+    await save("shopping", id, reste);
   }
   await save("recipes", recipe.id, Object.assign({}, recipe, {inList:false, listServings:null}));
 }
@@ -2326,8 +2350,15 @@ document.addEventListener("change", async (ev)=>{
   if(el.name === "unit") body.unit = el.value.trim();
   if(el.name === "qty"){
     const v = el.value.trim() === "" ? null : parseFloat(el.value.replace(",","."));
-    body.sources = {};
-    body.manualQty = (v!=null && !isNaN(v)) ? v : 0;
+    const q = (v!=null && !isNaN(v)) ? v : null;
+    if(Object.keys(body.sources||{}).length){
+      // une recette fournit cette ligne : la quantité saisie s'affiche à la
+      // place du total, mais la ligne reste rattachée à sa recette
+      body.qtyOverride = q;
+    }else{
+      delete body.qtyOverride;
+      body.manualQty = q==null ? 0 : q;
+    }
   }
   if(el.name === "unit" || el.name === "qty"){
     const newId = itemId(body.name, body.unit);
