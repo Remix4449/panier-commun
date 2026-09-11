@@ -1536,6 +1536,21 @@ async function recipeOffList(recipe){
   }
   await save("recipes", recipe.id, Object.assign({}, recipe, {inList:false, listServings:null}));
 }
+/* Une recette est « dans la liste » tant qu'au moins une de ses lignes y
+   figure. Quand la dernière s'en va autrement qu'en décochant la recette —
+   ligne supprimée à la main, articles cochés retirés — la recette se
+   décoche d'elle-même, plutôt que de rester affichée aux courses alors
+   qu'il n'en reste rien. */
+async function refreshRecipesInList(){
+  for(const r of [...state.recipes.values()]){
+    if(!r.inList) continue;
+    let reste = false;
+    for(const it of state.shopping.values()){
+      if(it.sources && (r.id in it.sources)){ reste = true; break; }
+    }
+    if(!reste) await save("recipes", r.id, Object.assign({}, r, {inList:false, listServings:null}));
+  }
+}
 
 /* ------------------------------ rendu ------------------------------ */
 const ICON_CHECK = '<svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 6.5"/></svg>';
@@ -2247,10 +2262,12 @@ document.addEventListener("click", async (ev)=>{
   if(act === "remove-item"){
     state.editing = null;
     await drop("shopping", id);
+    await refreshRecipesInList();
     return;
   }
   if(act === "clear-done"){
     for(const [iid, it] of [...state.shopping]) if(it.done) await drop("shopping", iid);
+    await refreshRecipesInList();
     toast("Articles cochés retirés");
     return;
   }
