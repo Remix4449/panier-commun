@@ -1386,13 +1386,14 @@ function openSheet(html){
 }
 function closeSheet(){
   sheetRecipeId = null;
+  sheetFormId = null;
   $("#scrim").classList.remove("open");
   $("#sheet").innerHTML = "";
   document.body.style.overflow = "";
 }
 const CLOSE_BTN = '<button class="sheet-close" data-act="close" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>';
 
-let sheetServings = null, sheetRecipeId = null;
+let sheetServings = null, sheetRecipeId = null, sheetFormId = null;
 function openRecipe(id){
   const r = state.recipes.get(id);
   if(!r) return;
@@ -1408,7 +1409,10 @@ function recipeSheetHTML(r){
     '<li><span class="q">' + esc(ing.qty!=null ? fmtQty(ing.qty*factor) + (ing.unit ? " " + ing.unit : "") : "—") + '</span>' +
     '<span class="n">' + esc(ing.name) + '</span></li>').join("");
   const steps = (r.steps||[]).filter(Boolean).map(s=>"<li>" + esc(s) + "</li>").join("");
-  return '<div class="sheet-head"><h2>' + esc(r.name) + '</h2>' + CLOSE_BTN + '</div>' +
+  return '<div class="sheet-head"><h2>' + esc(r.name) + '</h2>' +
+    '<button class="sheet-close" data-act="edit-recipe" data-id="' + esc(r.id) + '" aria-label="Modifier la recette" title="Modifier">' +
+      '<svg viewBox="0 0 24 24"><path d="M4 20h4L18.6 9.4a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M13.6 6.4l3 3"/></svg></button>' +
+    CLOSE_BTN + '</div>' +
     '<div class="sheet-body">' +
       (meta ? '<p style="margin:0 0 14px;color:var(--muted);font-size:13px">' + esc(meta) + '</p>' : "") +
       '<div class="servings"><span>Pour</span><span class="stepper">' +
@@ -1426,60 +1430,79 @@ function recipeSheetHTML(r){
     '</div>';
 }
 
-function openNewRecipe(){
+function openRecipeForm(id){
+  const r = id ? state.recipes.get(id) : null;
+  sheetFormId = r ? r.id : null;
   openSheet(
-    '<div class="sheet-head"><h2>Nouvelle recette</h2>' + CLOSE_BTN + '</div>' +
+    '<div class="sheet-head"><h2>' + (r ? "Modifier la recette" : "Nouvelle recette") + '</h2>' + CLOSE_BTN + '</div>' +
     '<form class="sheet-body" id="recipeForm">' +
-      '<div class="field"><label for="rName">Nom</label><input id="rName" name="name" required placeholder="Gratin de courgettes"></div>' +
+      '<div class="field"><label for="rName">Nom</label><input id="rName" name="name" required placeholder="Gratin de courgettes" value="' + (r ? esc(r.name) : "") + '"></div>' +
       '<div class="row2">' +
         '<div class="field"><label for="rCat">Catégorie</label>' +
-          '<input id="rCat" name="category" list="catList" value="Plat" placeholder="Plat" autocomplete="off">' +
+          '<input id="rCat" name="category" list="catList" value="' + esc(r ? (r.category||"") : "Plat") + '" placeholder="Plat" autocomplete="off">' +
           '<datalist id="catList">' + knownCats().map(c=>'<option value="' + esc(c) + '"></option>').join("") + '</datalist></div>' +
-        '<div class="field"><label for="rServ">Personnes</label><input id="rServ" name="servings" type="number" min="1" max="30" value="4"></div>' +
-        '<div class="field"><label for="rMin">Minutes</label><input id="rMin" name="minutes" type="number" min="0" max="999" placeholder="45"></div>' +
+        '<div class="field"><label for="rServ">Personnes</label><input id="rServ" name="servings" type="number" min="1" max="30" value="' + ((r && r.servings) || 4) + '"></div>' +
+        '<div class="field"><label for="rMin">Minutes</label><input id="rMin" name="minutes" type="number" min="0" max="999" placeholder="45" value="' + ((r && r.minutes) || "") + '"></div>' +
       '</div>' +
       '<div class="field"><label>Ingrédients</label><div id="ingRows"></div>' +
-        '<div class="hint">Quantité, unité, nom. Le rayon est deviné tout seul — corrigeable depuis la liste de courses.</div></div>' +
-      '<div class="field"><label for="rSteps">Préparation</label><textarea id="rSteps" name="steps" placeholder="Une étape par ligne."></textarea></div>' +
+        '<div class="hint">Quantité, unité, nom. Une ligne vide s\'ajoute dès que vous écrivez.</div></div>' +
+      '<div class="field"><label for="rSteps">Préparation</label><textarea id="rSteps" name="steps" placeholder="Une étape par ligne.">' + (r ? esc((r.steps||[]).join("\n")) : "") + '</textarea></div>' +
     '</form>' +
-    '<div class="sheet-foot"><button class="btn" data-act="close">Annuler</button>' +
-    '<button class="btn btn-primary" data-act="save-recipe">Enregistrer</button></div>'
+    '<div class="sheet-foot">' +
+      (r ? '<button class="btn" data-act="open-recipe" data-id="' + esc(r.id) + '">Annuler</button>'
+         : '<button class="btn" data-act="close">Annuler</button>') +
+      '<button class="btn btn-primary" data-act="save-recipe">Enregistrer</button></div>'
   );
-  addIngRow(); addIngRow(); addIngRow();
+  if(r){ (r.ingredients||[]).forEach(ing => addIngRow(ing)); addIngRow(); }
+  else { addIngRow(); addIngRow(); addIngRow(); }
 }
-function addIngRow(){
+function addIngRow(ing){
   const wrap = document.getElementById("ingRows");
   if(!wrap) return;
   const div = document.createElement("div");
   div.className = "ingrow";
-  div.innerHTML = '<input class="q" name="q" inputmode="decimal" placeholder="200" aria-label="Quantité">' +
-    '<input class="u" name="u" placeholder="g" aria-label="Unité">' +
-    '<input class="n" name="n" placeholder="Farine" aria-label="Ingrédient">' +
+  div.innerHTML = '<input class="q" name="q" inputmode="decimal" placeholder="200" aria-label="Quantité" value="' + esc(ing && ing.qty != null ? fmtQty(ing.qty) : "") + '">' +
+    '<input class="u" name="u" placeholder="g" aria-label="Unité" value="' + esc((ing && ing.unit) || "") + '">' +
+    '<input class="n" name="n" placeholder="Farine" aria-label="Ingrédient" value="' + esc((ing && ing.name) || "") + '">' +
     '<button type="button" class="x" data-act="rm-ing" aria-label="Retirer la ligne">×</button>';
   wrap.appendChild(div);
 }
 async function saveRecipe(){
   const form = document.getElementById("recipeForm");
   if(!form) return;
+  const prev = sheetFormId ? state.recipes.get(sheetFormId) : null;
   const fld = n => form.querySelector('[name="' + n + '"]');
   const name = fld("name").value.trim();
   if(!name){ fld("name").focus(); toast("Il manque le nom de la recette."); return; }
+  // un rayon choisi à la main sur un ingrédient survit à la modification
+  const rayonsConnus = new Map(((prev && prev.ingredients) || []).map(i => [norm(i.name), i.rayon]));
   const ingredients = [...document.querySelectorAll("#ingRows .ingrow")].map(row=>{
     const n = row.querySelector('[name="n"]').value.trim();
     if(!n) return null;
     const qRaw = row.querySelector('[name="q"]').value.trim().replace(",",".");
     const q = qRaw === "" ? null : parseFloat(qRaw);
     const u = row.querySelector('[name="u"]').value.trim();
-    return {name:n, qty:(q!=null && !isNaN(q)) ? q : null, unit:u, rayon:guessRayon(n)};
+    return {name:n, qty:(q!=null && !isNaN(q)) ? q : null, unit:u, rayon:rayonsConnus.get(norm(n)) || guessRayon(n)};
   }).filter(Boolean);
   const steps = fld("steps").value.split("\n").map(s=>s.trim().replace(/^\d+[.)]\s*/,"")).filter(Boolean);
-  const id = slug(name) + "-" + Math.random().toString(36).slice(2,6);
-  await save("recipes", id, {
-    name, category:fld("category").value, servings:parseInt(fld("servings").value,10)||4,
-    minutes:parseInt(fld("minutes").value,10)||null, ingredients, steps, inList:false, createdAt:Date.now()
-  });
+  const id = prev ? prev.id : slug(name) + "-" + Math.random().toString(36).slice(2,6);
+  const body = {
+    name, category:fld("category").value.trim(), servings:parseInt(fld("servings").value,10)||4,
+    minutes:parseInt(fld("minutes").value,10)||null, ingredients, steps,
+    inList: prev ? !!prev.inList : false,
+    listServings: prev ? (prev.listServings != null ? prev.listServings : null) : null,
+    createdAt: (prev && prev.createdAt) || Date.now()
+  };
+  await save("recipes", id, body);
+  // recette déjà aux courses : on refait ses lignes avec les nouveaux ingrédients
+  if(prev && prev.inList){
+    const fresh = Object.assign({id:id}, body);
+    await recipeOffList(fresh);
+    await recipeToList(fresh, body.listServings || body.servings);
+  }
+  sheetFormId = null;
   closeSheet();
-  toast("« " + name + " » enregistrée");
+  toast("« " + name + " » " + (prev ? "mise à jour" : "enregistrée"));
 }
 
 function openSyncSheet(){
@@ -1710,7 +1733,8 @@ document.addEventListener("click", async (ev)=>{
     toast("Ce téléphone n'est plus relié");
     return;
   }
-  if(act === "new-recipe"){ openNewRecipe(); return; }
+  if(act === "new-recipe"){ openRecipeForm(""); return; }
+  if(act === "edit-recipe"){ openRecipeForm(id); return; }
   if(act === "save-recipe"){ await saveRecipe(); return; }
   if(act === "rm-ing"){
     const rows = document.querySelectorAll("#ingRows .ingrow");
