@@ -4,7 +4,7 @@
    La page part d'abord sur le réseau et retombe sur le cache : une mise à
    jour arrive donc dès le rechargement suivant, et non celui d'après. Les
    icônes et le manifeste, eux, sortent du cache d'abord. */
-const CACHE = "panier-v7";
+const CACHE = "panier-v8";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", ev => {
