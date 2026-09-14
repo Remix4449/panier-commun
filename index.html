@@ -1454,6 +1454,22 @@ let queue = [];
 let cfg = {url:"", code:""};
 let es = null, esState = "off", firstSync = false, retryTimer = null;
 
+/* ------------------------- SYNCHRONISATION EN PAUSE -------------------------
+   MESURE TEMPORAIRE, À RETIRER.
+
+   Des repas de la semaine ont été effacés par mégarde. La suppression n'est
+   qu'une pierre tombale horodatée : au premier échange, elle gagnerait sur
+   l'autre téléphone, qui garde encore le planning. On coupe donc le réseau
+   des deux côtés, le temps de récupérer.
+
+   Ce qui continue : tout. Les écritures vont dans `localStorage` comme
+   d'habitude, et `pushDoc()` empile toujours dans `queue` — rien ne se perd,
+   tout repartira vers le foyer quand ce drapeau retombera à `false`.
+   Ce qui s'arrête : `connect()` n'ouvre plus le flux de lecture, `flush()`
+   n'envoie plus rien. Aucune suppression ne peut donc traverser.
+--------------------------------------------------------------------------- */
+const SYNC_PAUSED = true;
+
 /* Firebase efface toute clé mise à `null`, et le nœud resté vide avec elle.
    Un ingrédient sans quantité s'écrivait `sources[recette] = null` : la base
    avalait la clé, puis `sources` tout entier, et la ligne revenait aux deux
@@ -1538,6 +1554,7 @@ function pushDoc(col, id){
 }
 let flushing = false;
 async function flush(){
+  if(SYNC_PAUSED){ updateSync(); return; }
   if(flushing || !cfg.url || !cfg.code || !queue.length) return;
   if(navigator.onLine === false){ updateSync(); return; }
   flushing = true;
@@ -1618,6 +1635,7 @@ function onStream(ev){
 }
 function connect(){
   if(es){ try{ es.close(); }catch(e){} es = null; }
+  if(SYNC_PAUSED){ esState = "off"; updateSync(); return; }
   if(!cfg.url || !cfg.code){ esState = "off"; updateSync(); return; }
   firstSync = false;
   esState = "wait"; updateSync();
@@ -1637,6 +1655,11 @@ function updateSync(){
   const el = document.getElementById("sync");
   const label = document.getElementById("syncLabel");
   if(!el) return;
+  if(SYNC_PAUSED){
+    el.dataset.state = "wait";
+    label.textContent = queue.length ? "Pause · " + queue.length + " en attente" : "Sync en pause";
+    return;
+  }
   if(!cfg.url || !cfg.code){ el.dataset.state = "local"; label.textContent = "Ce téléphone"; return; }
   if(queue.length){ el.dataset.state = "wait"; label.textContent = queue.length + " en attente"; return; }
   if(esState === "live"){ el.dataset.state = "live"; label.textContent = "Foyer"; return; }
