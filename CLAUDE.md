@@ -103,11 +103,14 @@ souhaitable ici.
 - `openPicker()` ne propose que les recettes cochées (`inList`), plus celle
   déjà posée sur le créneau — sans quoi la feuille ne montrerait pas ce que
   le repas porte quand la recette a été décochée depuis.
-- Le filtre « Semaine » de l'écran Recettes vit dans `state.week` (retenu
-  dans `panier.ui.v1`) : `weekCounts()` compte les repas par recette,
-  `recipesBase()` applique le filtre entre la recherche et les catégories.
-  Une recette posée sur plusieurs repas ne verse ses ingrédients qu'une
-  fois — `sources` est indexé par recette, pas par repas.
+- Le cadrage de l'écran Recettes vit dans `state.scope` — `""`, `"list"`
+  (recettes cochées) ou `"week"` (recettes posées sur un repas) — retenu
+  dans `panier.ui.v1`. `listCount()` et `weekCounts()` donnent les comptes
+  des deux pastilles, `recipesBase()` applique le cadrage entre la recherche
+  et les catégories, et `render()` l'éteint dès qu'il n'a plus rien à
+  montrer. Les deux ne valent jamais ensemble. Une recette posée sur
+  plusieurs repas ne verse ses ingrédients qu'une fois — `sources` est
+  indexé par recette, pas par repas.
 - `pantry` est la mémoire des articles ajoutés à la volée — nom, unité,
   rayon corrigé. Elle sert les suggestions de la barre d'ajout et survit à
   la purge de la liste ; `remember()` l'alimente, plafonnée à 240 entrées.

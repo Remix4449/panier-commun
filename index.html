@@ -611,9 +611,11 @@ button{cursor:pointer;background:none;border:none;padding:0}
 .chip[aria-pressed="true"] .n{opacity:.8}
 :root[data-theme="dark"] .chip[aria-pressed="true"],
 :root:not([data-theme="light"]) .chip[aria-pressed="true"]{color:#10231A}
-/* La pastille « Semaine » ne range pas par catégorie : elle ne garde que les
-   recettes posées dans un repas de la semaine. Sa teinte la sépare des
-   catégories, qui la suivent sur la même ligne, derrière un filet. */
+/* Les deux cadrages ne rangent pas par catégorie : ils ne gardent que les
+   recettes cochées aux courses, ou celles posées sur un repas. Leurs teintes
+   les séparent des catégories, qui les suivent derrière un filet — « Cochées »
+   reprend le vert de « dans la liste », « Semaine » l'ambre de la semaine. */
+.chip.list svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round}
 .chip.week[aria-pressed="true"]{background:var(--citron);color:#FFFCF7}
 :root[data-theme="dark"] .chip.week[aria-pressed="true"],
 :root:not([data-theme="light"]) .chip.week[aria-pressed="true"]{color:#16110D}
@@ -1335,7 +1337,10 @@ function parseRecipes(entree){
    Rien de tout cela n'est partagé — c'est propre à ce téléphone.
 ------------------------------------------------------------------- */
 const UI_TABS = ["recipes","list","week"];
-let ui = {tab:"recipes", scroll:0, closed:[], week:false};
+/* Cadrage de l'écran Recettes : tout le carnet, les seules recettes cochées
+   aux courses, ou les seules recettes posées sur un repas de la semaine. */
+const SCOPES = ["", "list", "week"];
+let ui = {tab:"recipes", scroll:0, closed:[], scope:""};
 
 function loadUI(){
   try{
@@ -1344,7 +1349,10 @@ function loadUI(){
       if(UI_TABS.indexOf(raw.tab) >= 0) ui.tab = raw.tab;
       if(typeof raw.scroll === "number" && raw.scroll >= 0) ui.scroll = raw.scroll;
       if(Array.isArray(raw.closed)) ui.closed = raw.closed.filter(x=>typeof x === "string");
-      if(typeof raw.week === "boolean") ui.week = raw.week;
+      if(SCOPES.indexOf(raw.scope) >= 0) ui.scope = raw.scope;
+      /* Installations d'avant les deux pastilles : le booléen « semaine »
+         d'alors devient le cadrage du même nom. */
+      else if(raw.week === true) ui.scope = "week";
     }
   }catch(e){}
 }
@@ -1434,7 +1442,7 @@ const LS_DATA = "panier.data.v1";
 const LS_CFG  = "panier.foyer.v1";
 const LS_UI   = "panier.ui.v1";
 const state = { recipes:new Map(), shopping:new Map(), plan:new Map(), rayons:new Map(), pantry:new Map(),
-                tab:"recipes", editing:null, ready:false, find:"", cat:"", week:false };
+                tab:"recipes", editing:null, ready:false, find:"", cat:"", scope:"" };
 
 let localData = {recipes:{}, shopping:{}, plan:{}, rayons:{}, pantry:{}};
 let queue = [];
@@ -1823,10 +1831,12 @@ async function refreshRecipesInList(){
 const ICON_CHECK = '<svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 6.5"/></svg>';
 
 function render(){
-  /* Le filtre « Semaine » s'éteint de lui-même dès que plus aucun repas
-     n'est posé : sans cela l'écran des recettes resterait vide sans qu'on
-     sache pourquoi. */
-  if(state.week && !weekCounts().size){ state.week = false; ui.week = false; saveUI(); }
+  /* Le cadrage s'éteint de lui-même dès qu'il n'a plus rien à montrer —
+     dernière recette décochée, semaine vidée : sans cela l'écran des
+     recettes resterait vide sans qu'on sache pourquoi. */
+  if((state.scope === "list" && !listCount()) || (state.scope === "week" && !weekCounts().size)){
+    state.scope = ""; ui.scope = ""; saveUI();
+  }
   renderHead();
   renderRecipes();
   renderList();
@@ -1844,7 +1854,7 @@ function renderHead(){
   const acts = $("#headActions");
   if(state.tab === "recipes"){
     const n = state.recipes.size;
-    const filtre = state.find || state.cat || state.week;
+    const filtre = state.find || state.cat || state.scope;
     const vu = filtre ? recipesShown().length : n;
     const cochees = [...state.recipes.values()].filter(r=>r.inList).length;
     count.textContent = !n ? "" : (filtre ? vu + " sur " + n : n + (n>1 ? " recettes" : " recette"));
@@ -1890,6 +1900,11 @@ function recipesFound(){
 /* Les repas de la semaine, comptés par recette. Une recette posée deux
    fois y compte deux fois — ce chiffre s'affiche sur sa tuile — mais elle ne
    verse ses ingrédients aux courses qu'une seule fois. */
+function listCount(){
+  let n = 0;
+  for(const r of state.recipes.values()) if(r.inList) n++;
+  return n;
+}
 function weekCounts(){
   const m = new Map();
   for(const p of state.plan.values()){
@@ -1898,13 +1913,17 @@ function weekCounts(){
   }
   return m;
 }
-/* Ce que la recherche a retenu, puis, filtre « Semaine » allumé, les seules
-   recettes posées dans un repas de la semaine. */
+/* Ce que la recherche a retenu, puis le cadrage : les recettes cochées aux
+   courses, ou celles posées sur un repas de la semaine. Les deux ne valent
+   jamais ensemble — on regarde le carnet par un bout ou par l'autre. */
 function recipesBase(){
   const found = recipesFound();
-  if(!state.week) return found;
-  const semaine = weekCounts();
-  return found.filter(r => semaine.has(r.id));
+  if(state.scope === "list") return found.filter(r => r.inList);
+  if(state.scope === "week"){
+    const semaine = weekCounts();
+    return found.filter(r => semaine.has(r.id));
+  }
+  return found;
 }
 function recipesShown(){
   const base = recipesBase();
@@ -1934,6 +1953,7 @@ function renderRecipes(){
   const box = $("#catFilters");
   const total = state.recipes.size;
   const semaine = weekCounts();
+  const cochees = listCount();
   const found = recipesBase();
 
   /* pastilles de catégorie, comptées sur ce que le filtre laisse passer */
@@ -1946,15 +1966,21 @@ function renderRecipes(){
       'Toutes<span class="n">' + found.length + '</span></button>' +
     cats.map(c => '<button class="chip" data-act="cat-filter" data-cat="' + esc(c) + '" aria-pressed="' + (state.cat === c ? "true" : "false") + '">' +
       catPic(c) + ' ' + esc(c) + '<span class="n">' + counts.get(c) + '</span></button>').join("");
-  /* La pastille « Semaine » n'apparaît que lorsqu'un repas est posé ; son
-     compte est celui des recettes distinctes de la semaine, pas celui des
-     repas — une recette servie deux fois n'y figure qu'une fois. */
-  const pastilleSemaine = !semaine.size ? "" :
-    '<button class="chip week" data-act="week-filter" aria-pressed="' + (state.week ? "true" : "false") + '" ' +
-      'aria-label="Ne montrer que les recettes prévues cette semaine">' +
-      '📅 Semaine<span class="n">' + semaine.size + '</span></button>' +
-    (pastillesCats ? '<span class="chipsep" aria-hidden="true"></span>' : "");
-  box.innerHTML = pastilleSemaine + pastillesCats;
+  /* Les deux cadrages, dans l'ordre où l'on compose : on coche d'abord aux
+     courses, on pose ensuite sur les jours. Chacun n'apparaît que lorsqu'il
+     a quelque chose à montrer, et le compte de « Semaine » est celui des
+     recettes distinctes, pas celui des repas — une recette servie deux fois
+     n'y figure qu'une fois. */
+  const cadrage = (nom, cle, pic, n, aide) => !n ? "" :
+    '<button class="chip ' + cle + '" data-act="scope-filter" data-scope="' + cle + '" ' +
+      'aria-pressed="' + (state.scope === cle ? "true" : "false") + '" aria-label="' + aide + '">' +
+      pic + ' ' + nom + '<span class="n">' + n + '</span></button>';
+  const pastillesCadrage =
+    cadrage("Cochées", "list", ICON_CHECK, cochees, "Ne montrer que les recettes cochées aux courses") +
+    cadrage("Semaine", "week", "📅", semaine.size, "Ne montrer que les recettes prévues cette semaine");
+  box.innerHTML = pastillesCadrage +
+    ((pastillesCadrage && pastillesCats) ? '<span class="chipsep" aria-hidden="true"></span>' : "") +
+    pastillesCats;
 
   if(!total){
     ul.innerHTML = '<li>' + (state.ready
@@ -1964,12 +1990,15 @@ function renderRecipes(){
   }
   const shown = recipesShown();
   if(!shown.length){
-    ul.innerHTML = '<li><div class="empty">' + (state.week
-      ? '<span class="pic" aria-hidden="true">📅</span><strong>Rien de prévu qui corresponde</strong>' +
-        'Ce filtre ne garde que les recettes posées dans un repas de la semaine. Touchez de nouveau « Semaine » pour revoir tout le carnet.'
-      : '<span class="pic" aria-hidden="true">🔍</span><strong>Rien ne correspond</strong>' +
-        'Aucune recette ne répond à cette recherche. Essayez un autre mot, ou le nom d’un ingrédient.') +
-      '</div></li>';
+    const vides = {
+      list: '<span class="pic" aria-hidden="true">🧺</span><strong>Rien de coché qui corresponde</strong>' +
+            'Ce filtre ne garde que les recettes cochées aux courses. Touchez de nouveau « Cochées » pour revoir tout le carnet.',
+      week: '<span class="pic" aria-hidden="true">📅</span><strong>Rien de prévu qui corresponde</strong>' +
+            'Ce filtre ne garde que les recettes posées dans un repas de la semaine. Touchez de nouveau « Semaine » pour revoir tout le carnet.',
+      "":   '<span class="pic" aria-hidden="true">🔍</span><strong>Rien ne correspond</strong>' +
+            'Aucune recette ne répond à cette recherche. Essayez un autre mot, ou le nom d’un ingrédient.'
+    };
+    ul.innerHTML = '<li><div class="empty">' + vides[state.scope] + '</div></li>';
     return;
   }
   /* groupé par catégorie tant qu'aucune n'est sélectionnée */
@@ -2685,9 +2714,12 @@ document.addEventListener("click", async (ev)=>{
     return;
   }
 
-  if(act === "week-filter"){
-    state.week = !state.week;
-    ui.week = state.week; saveUI();
+  if(act === "scope-filter"){
+    /* Toucher le cadrage déjà allumé le rend au carnet entier ; toucher
+       l'autre passe de l'un à l'autre, les deux ne valent jamais ensemble. */
+    const veut = btn.dataset.scope || "";
+    state.scope = (state.scope === veut) ? "" : veut;
+    ui.scope = state.scope; saveUI();
     renderHead(); renderRecipes();
     return;
   }
@@ -2877,7 +2909,7 @@ document.addEventListener("input", ev=>{
   }
   for(const col of COLS) state[col] = visible(col);
   state.ready = true;
-  state.week = !!ui.week;
+  state.scope = ui.scope;
   showTab(ui.tab);
   render();
   fuseDuplicates();

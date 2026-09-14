@@ -11,8 +11,9 @@ Une page, aucune dépendance, aucun compte à créer pour s'en servir.
   personnes, et une case à cocher sur la tuile qui verse les ingrédients dans
   la liste de courses (et les retire quand on la décoche, sans toucher à ce qui
   a été ajouté à la main) ; « Tout décocher » vide d'un coup ce que les
-  recettes y ont mis. La pastille **Semaine** ne garde que les recettes posées
-  dans un repas de la semaine, et chaque tuile dit combien de repas elle y
+  recettes y ont mis. Deux pastilles cadrent la liste — **Cochées** ne garde
+  que les recettes cochées aux courses, **Semaine** que celles posées sur un
+  repas ; l'une éteint l'autre, et chaque tuile dit combien de repas elle
   occupe. La flèche ↓ en haut avale une recette venue d'ailleurs : son texte
   brut, un lien d'import, ou du JSON.
 - **Courses** — triées par rayon dans l'ordre d'un parcours de magasin. La barre
