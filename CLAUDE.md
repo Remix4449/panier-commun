@@ -93,13 +93,29 @@ souhaitable ici.
   (`recipes`, `shopping`, `plan`, `rayons`, `pantry`) : localStorage
   d'abord, puis file d'attente vers Firebase si un foyer est configuré.
   Tout passe par là, jamais par `localData` directement.
-- Une ligne de courses est retrouvée par `findItemId()`, jamais par
-  `itemId()` seul : `itemKey()` rapproche les écritures d'un même article
-  (pluriel, ligatures, ponctuation, unité dite autrement) pour que deux
-  recettes grossissent la même ligne au lieu d'en ouvrir deux.
-  `fuseDuplicates()` fond les doublons déjà en place — au démarrage et à
-  chaque arrivée de l'autre téléphone ; il garde toujours le plus petit
-  identifiant du groupe, ce qui fait converger les deux téléphones.
+- Une ligne de courses est retrouvée par `findItemId(nom, unité, qté)`,
+  jamais par `itemId()` seul : `itemKey()` rapproche les écritures d'un même
+  article (pluriel, ligatures, ponctuation, unité dite autrement) pour que
+  deux recettes grossissent la même ligne au lieu d'en ouvrir deux. Un
+  pense-bête — ni unité ni quantité, `isNote()` — rejoint en plus la ligne
+  du même article qui compte dans une unité : « Ail » tapé dans la barre
+  retrouve les trois gousses de la bolognaise. Le rapprochement s'arrête là,
+  200 g et 1 kg de farine restent deux lignes : les additionner donnerait un
+  total faux. `duplicateGroups()` forme les paquets, `fuseDuplicates()` les
+  fond — au démarrage et à chaque arrivée de l'autre téléphone ; il garde
+  toujours le plus petit identifiant du groupe, ce qui fait converger les
+  deux téléphones, et la ligne qui survit adopte l'unité du groupe.
+- Une ligne tapée dans la barre d'ajout porte `manual:true` et s'affiche avec
+  un 👋. `manualQty` ne suffisait pas à la reconnaître : un article ajouté
+  sans quantité vaut 0, et sa ligne n'affichait alors rien sous son nom —
+  elle se lisait comme le reste d'une recette disparue. `markHandAdded()`
+  rattrape les lignes écrites avant ce champ ; `tidyShopping()` enchaîne la
+  fusion puis ce marquage.
+- Supprimer une recette (`del-recipe`) passe d'abord par `recipeOffList()` :
+  sans quoi ses lignes restaient aux courses en citant une recette absente.
+  `itemFrom()` / `itemParts()` affichent « Recette retirée » pour les
+  `sources` dont la recette n'est plus au carnet — lignes d'avant, ou
+  suppression pas encore reçue de l'autre téléphone.
 - `openPicker()` ne propose que les recettes cochées (`inList`), plus celle
   déjà posée sur le créneau — sans quoi la feuille ne montrerait pas ce que
   le repas porte quand la recette a été décochée depuis.
