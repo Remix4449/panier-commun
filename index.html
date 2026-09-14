@@ -1454,9 +1454,33 @@ let queue = [];
 let cfg = {url:"", code:""};
 let es = null, esState = "off", firstSync = false, retryTimer = null;
 
+/* Firebase efface toute clé mise à `null`, et le nœud resté vide avec elle.
+   Un ingrédient sans quantité s'écrivait `sources[recette] = null` : la base
+   avalait la clé, puis `sources` tout entier, et la ligne revenait aux deux
+   téléphones sans plus rien pour dire de quelle recette elle venait. On
+   écrit un tiret à la place, que la base garde, et la lecture le rend au
+   `null` attendu partout ailleurs — les totaux ne voient jamais passer le
+   tiret. */
+const SANS_QTE = "—";
+function packSources(sources){
+  const out = {};
+  for(const [rid, q] of Object.entries(sources||{})){
+    out[rid] = (q == null || isNaN(q)) ? SANS_QTE : q;
+  }
+  return out;
+}
+function unpackSources(sources){
+  const out = {};
+  for(const rid of Object.keys(sources||{})){
+    const q = sources[rid];
+    out[rid] = typeof q === "number" ? q : null;
+  }
+  return out;
+}
 function clean(body){
   const out = {};
   for(const [k,v] of Object.entries(body)){ if(k!=="id" && v!==undefined) out[k]=v; }
+  if(out.sources) out.sources = packSources(out.sources);
   return out;
 }
 function loadLocal(){
@@ -1479,7 +1503,11 @@ function persist(){
 function visible(col){
   const m = new Map();
   for(const [id,d] of Object.entries(localData[col]||{})){
-    if(d && !d.deleted) m.set(id, Object.assign({}, d, {id}));
+    if(d && !d.deleted){
+      const it = Object.assign({}, d, {id});
+      if(it.sources) it.sources = unpackSources(it.sources);
+      m.set(id, it);
+    }
   }
   return m;
 }
@@ -1813,22 +1841,38 @@ async function fuseDuplicates(){
   } finally { enFusion = false; }
   return fait;
 }
-/* Les lignes écrites avant que `manual` existe : aucune recette derrière,
-   elles ne peuvent venir que de la barre d'ajout. On les marque une fois
-   pour toutes, sinon elles resteraient sans 👋. */
-async function markHandAdded(){
-  for(const [id, it] of [...state.shopping]){
-    if(it.manual !== undefined) continue;
-    if(Object.keys(it.sources||{}).length) continue;
-    await save("shopping", id, Object.assign({}, it, {manual:true}));
+/* Réparation des lignes que la base a coupées de leur recette — le `null`
+   avalé, plus haut. Une recette qui se sait cochée alors que plus aucune
+   ligne ne la cite est dans ce cas : on lui rend ses lignes. Elles seules :
+   une ligne absente n'est pas recréée, elle a pu être retirée exprès.
+   Passe unique de fait — une fois reliée, la recette ne repasse plus ici. */
+async function relinkRecipes(){
+  for(const r of [...state.recipes.values()]){
+    if(!r.inList) continue;
+    let liee = false;
+    for(const it of state.shopping.values()){
+      if(it.sources && (r.id in it.sources)){ liee = true; break; }
+    }
+    if(liee) continue;
+    const facteur = (r.listServings || r.servings || 1) / (r.servings || 1);
+    for(const ing of (r.ingredients||[])){
+      const id = findItemId(ing.name, ing.unit, ing.qty);
+      const it = state.shopping.get(id);
+      if(!it) continue;
+      const body = Object.assign({}, it, {sources:Object.assign({}, it.sources||{})});
+      body.sources[r.id] = ing.qty == null ? null : Math.round(ing.qty*facteur*100)/100;
+      /* Le 👋 d'une version précédente, posé sur une ligne devenue orpheline
+         alors qu'elle venait d'une recette : la recette la réclame, et
+         aucune quantité n'y a jamais été tapée à la main. */
+      if(!body.manualQty) delete body.manual;
+      await save("shopping", id, body);
+    }
   }
 }
-/* Le ménage de la liste, et l'ordre compte : marquer d'abord, fondre
-   ensuite. L'inverse perdrait le 👋 de l'article ajouté à la main le jour
-   où une recette vient tenir la même ligne — fondu, il n'a plus l'air de
-   venir de nulle part, et plus rien ne dit qu'on l'avait tapé. */
+/* Le ménage de la liste : rendre d'abord leurs recettes aux lignes qui les
+   ont perdues, fondre les doublons ensuite. */
 async function tidyShopping(){
-  await markHandAdded();
+  await relinkRecipes();
   await fuseDuplicates();
 }
 /* Tout ce qu'on ajoute à la volée est retenu : le nom tel qu'on l'écrit,
@@ -2899,8 +2943,10 @@ document.addEventListener("change", async (ev)=>{
     const q = (v!=null && !isNaN(v)) ? v : null;
     if(Object.keys(body.sources||{}).length){
       // une recette fournit cette ligne : la quantité saisie s'affiche à la
-      // place du total, mais la ligne reste rattachée à sa recette
-      body.qtyOverride = q;
+      // place du total, mais la ligne reste rattachée à sa recette. Champ
+      // vidé, le total repart du calcul — ce que dit l'éditeur, et ce que la
+      // base ferait de toute façon d'un `null`.
+      if(q == null) delete body.qtyOverride; else body.qtyOverride = q;
     }else{
       delete body.qtyOverride;
       body.manualQty = q==null ? 0 : q;
