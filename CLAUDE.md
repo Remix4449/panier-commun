@@ -105,12 +105,22 @@ souhaitable ici.
   fond — au démarrage et à chaque arrivée de l'autre téléphone ; il garde
   toujours le plus petit identifiant du groupe, ce qui fait converger les
   deux téléphones, et la ligne qui survit adopte l'unité du groupe.
+- **Jamais de `null` dans un document synchronisé.** Firebase efface la clé
+  qu'on met à `null`, puis le nœud resté vide. Un ingrédient sans quantité
+  écrivait `sources[recette] = null` : la base avalait `sources` entier et la
+  ligne revenait orpheline sur les deux téléphones — c'est ce qui peuplait la
+  liste d'articles « sans recette ». `packSources()` écrit un tiret à la
+  place dans `clean()`, `unpackSources()` le rend au `null` attendu dans
+  `visible()` ; entre les deux, rien ne change. `relinkRecipes()` répare les
+  lignes déjà coupées : une recette qui se sait cochée sans qu'aucune ligne
+  ne la cite retrouve les siennes — celles encore présentes seulement, une
+  ligne retirée exprès n'est pas recréée.
 - Une ligne tapée dans la barre d'ajout porte `manual:true` et s'affiche avec
   un 👋. `manualQty` ne suffisait pas à la reconnaître : un article ajouté
-  sans quantité vaut 0, et sa ligne n'affichait alors rien sous son nom —
-  elle se lisait comme le reste d'une recette disparue. `markHandAdded()`
-  rattrape les lignes écrites avant ce champ ; `tidyShopping()` enchaîne la
-  fusion puis ce marquage.
+  sans quantité vaut 0, et sa ligne n'affichait alors rien sous son nom. Seul
+  `addManual()` pose ce champ — le 👋 ne dit donc jamais « recette écrite à la
+  main », seulement « tapé depuis les courses ». Ne jamais le déduire d'une
+  ligne sans `sources` : une ligne peut avoir perdu sa recette.
 - Supprimer une recette (`del-recipe`) passe d'abord par `recipeOffList()` :
   sans quoi ses lignes restaient aux courses en citant une recette absente.
   `itemFrom()` / `itemParts()` affichent « Recette retirée » pour les
