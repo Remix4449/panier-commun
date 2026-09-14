@@ -100,6 +100,9 @@ souhaitable ici.
   `fuseDuplicates()` fond les doublons déjà en place — au démarrage et à
   chaque arrivée de l'autre téléphone ; il garde toujours le plus petit
   identifiant du groupe, ce qui fait converger les deux téléphones.
+- `openPicker()` ne propose que les recettes cochées (`inList`), plus celle
+  déjà posée sur le créneau — sans quoi la feuille ne montrerait pas ce que
+  le repas porte quand la recette a été décochée depuis.
 - Le filtre « Semaine » de l'écran Recettes vit dans `state.week` (retenu
   dans `panier.ui.v1`) : `weekCounts()` compte les repas par recette,
   `recipesBase()` applique le filtre entre la recherche et les catégories.

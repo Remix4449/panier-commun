@@ -582,6 +582,8 @@ button{cursor:pointer;background:none;border:none;padding:0}
 .picklist li + li{margin-top:2px}
 .picklist .cat{font-size:12px;text-transform:none;letter-spacing:0;color:var(--citron);background:var(--citron-soft);border-radius:999px;padding:2px 10px;margin-left:auto;font-weight:700}
 .picklist button:hover{color:var(--accent-ink);background:var(--accent-soft)}
+/* La recette déjà posée sur ce repas se repère sans lire toute la liste. */
+.picklist button[aria-current="true"]{color:var(--accent-ink);background:var(--accent-soft);font-weight:700}
 .note{font-size:13px;color:var(--muted);line-height:1.6;margin:20px 6px 0;text-align:center}
 .toast{
   position:fixed;left:50%;transform:translateX(-50%);bottom:92px;z-index:60;
@@ -2333,16 +2335,29 @@ function openSyncSheet(){
   );
 }
 
+/* Le choix d'un repas ne propose que les recettes cochées dans l'onglet
+   Recettes : la semaine se compose d'abord dans le carnet, elle se pose
+   ensuite ici. La recette déjà au créneau reste proposée même décochée,
+   sinon la feuille ne montrerait pas ce que le repas porte. */
 function openPicker(slotId){
-  const recipes = [...state.recipes.values()].sort((a,b)=>(a.name||"").localeCompare(b.name||"","fr"));
+  const p = state.plan.get(slotId);
+  const encours = (p && p.recipeId) || "";
+  const recipes = [...state.recipes.values()]
+    .filter(r => r.inList || r.id === encours)
+    .sort((a,b)=>(a.name||"").localeCompare(b.name||"","fr"));
   const [dpart, spart] = slotId.split("_");
   const title = DAYS[parseInt(dpart.slice(1),10)] + " · " + (spart === "midi" ? "midi" : "soir");
+  const vide = !state.recipes.size
+    ? '<span class="pic" aria-hidden="true">🍳</span>Ajoutez d’abord une recette.'
+    : '<span class="pic" aria-hidden="true">📖</span><strong>Aucune recette cochée</strong>' +
+      'Seules les recettes cochées dans l’onglet Recettes se posent sur un repas. Touchez « aux courses » sur celles de la semaine, elles viendront ici.';
   openSheet(
     '<div class="sheet-head"><h2>' + esc(title) + '</h2>' + CLOSE_BTN + '</div>' +
     '<div class="sheet-body"><ul class="picklist">' +
-      (recipes.length ? recipes.map(r=>'<li><button data-act="set-slot" data-slot="' + esc(slotId) + '" data-id="' + esc(r.id) + '">' +
+      (recipes.length ? recipes.map(r=>'<li><button data-act="set-slot" data-slot="' + esc(slotId) + '" data-id="' + esc(r.id) + '"' +
+        (r.id === encours ? ' aria-current="true"' : '') + '>' +
         esc(r.name) + '<span class="cat">' + esc(r.category||"") + '</span></button></li>').join("")
-        : '<li><div class="empty"><span class="pic" aria-hidden="true">🍳</span>Ajoutez d’abord une recette.</div></li>') +
+        : '<li><div class="empty">' + vide + '</div></li>') +
     '</ul></div>' +
     '<div class="sheet-foot"><button class="btn btn-quiet" data-act="set-slot" data-slot="' + esc(slotId) + '" data-id="">Vider ce repas</button></div>'
   );

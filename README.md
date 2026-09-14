@@ -26,9 +26,11 @@ Une page, aucune dépendance, aucun compte à créer pour s'en servir.
   « Oignons », « 200 gr » et « 200 g ». Toucher une ligne ouvre son détail :
   les recettes qui la fournissent et ce que chacune y met.
 - **Semaine** — midi et soir sur sept jours, et un bouton qui envoie tous les
-  repas planifiés dans les courses. Une même recette peut occuper plusieurs
-  repas : elle ne verse ses ingrédients qu'une fois, les quantités ne doublent
-  pas.
+  repas planifiés dans les courses. Un repas ne se choisit que parmi les
+  recettes cochées dans l'onglet Recettes : la semaine se compose d'abord dans
+  le carnet, elle se pose ensuite sur les jours. Une même recette peut occuper
+  plusieurs repas : elle ne verse ses ingrédients qu'une fois, les quantités ne
+  doublent pas.
 
 Au rechargement, l'app rouvre l'onglet où l'on était, à la hauteur où l'on
 était. Et quand le clavier du téléphone s'ouvre, la page remonte pour garder le
