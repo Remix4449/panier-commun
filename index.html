@@ -261,6 +261,9 @@ button{cursor:pointer;background:none;border:none;padding:0}
   color:var(--citron);background:var(--citron-soft);border-radius:999px;padding:2px 10px;
 }
 .tile-meta .num{font-family:"DM Mono",ui-monospace,monospace;font-size:12.5px}
+/* Une recette peut occuper plusieurs repas de la semaine ; la tuile le dit,
+   et les courses n'en tiennent qu'une fois compte. */
+.tile-meta .cat.wk{color:var(--accent-ink);background:var(--accent-soft)}
 .tile-meta .dot{width:3px;height:3px;border-radius:50%;background:var(--line-strong)}
 .tile-check{
   width:74px;flex:none;
@@ -382,6 +385,22 @@ button{cursor:pointer;background:none;border:none;padding:0}
 .editor select{flex:1;min-width:130px}
 .editor .rm{color:var(--danger);font-size:13px;font-weight:700;padding:7px 12px;border-radius:999px}
 .editor .rm:hover{background:var(--warm-soft)}
+/* D'où vient la ligne : les recettes qui la fournissent et ce que chacune y
+   met. Deux recettes qui demandent le même ingrédient ne font qu'une ligne —
+   c'est ici qu'on lit le détail du total. */
+.editor .from{flex-basis:100%;margin:2px 0 4px}
+.editor .from-lab{
+  display:block;font-size:11.5px;font-weight:700;color:var(--muted);margin-bottom:6px;
+}
+.editor .from ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.editor .from li{display:flex;align-items:baseline;gap:9px;font-size:13.5px;line-height:1.35}
+.editor .from .who{flex:1;min-width:0}
+.editor .from .howmuch{
+  font-family:"DM Mono",ui-monospace,monospace;font-size:12px;flex:none;
+  color:var(--ray);background:var(--ray-soft);border-radius:999px;padding:2px 9px;
+  font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+.editor .from .note{font-size:12px;color:var(--muted);margin:7px 0 0}
 
 /* ---------- semaine ---------- */
 .days{display:flex;flex-direction:column;gap:12px}
@@ -590,6 +609,13 @@ button{cursor:pointer;background:none;border:none;padding:0}
 .chip[aria-pressed="true"] .n{opacity:.8}
 :root[data-theme="dark"] .chip[aria-pressed="true"],
 :root:not([data-theme="light"]) .chip[aria-pressed="true"]{color:#10231A}
+/* La pastille « Semaine » ne range pas par catégorie : elle ne garde que les
+   recettes posées dans un repas de la semaine. Sa teinte la sépare des
+   catégories, qui la suivent sur la même ligne, derrière un filet. */
+.chip.week[aria-pressed="true"]{background:var(--citron);color:#FFFCF7}
+:root[data-theme="dark"] .chip.week[aria-pressed="true"],
+:root:not([data-theme="light"]) .chip.week[aria-pressed="true"]{color:#16110D}
+.chipsep{flex:none;width:1px;align-self:stretch;margin:3px 5px;background:var(--line-strong);border-radius:1px}
 
 /* barre de recherche sans bouton d'envoi */
 .addbar.plain form{padding:5px 8px 5px 16px}
@@ -1050,6 +1076,29 @@ function slug(s){
   return out || "x";
 }
 function itemId(name, unit){ return slug(name) + "--" + slug(unit||"u"); }
+/* Un ingrédient ne s'écrit pas de la même façon d'une recette à l'autre :
+   « Oignon » ici, « Oignons » là, « 200 gr » plutôt que « 200 g ». La clé
+   d'un article gomme ces écarts — pluriel, ligatures, ponctuation, unité
+   dite autrement — pour que deux recettes se retrouvent sur la même ligne de
+   courses au lieu d'en ouvrir deux. Elle ne sert qu'à rapprocher : le nom
+   affiché reste celui qu'on a écrit. */
+function singulier(mot){
+  if(mot.length > 4 && (/aux$/.test(mot) || /oux$/.test(mot))) return mot.slice(0, -1);
+  if(mot.length > 3 && /s$/.test(mot) && !/ss$/.test(mot)) return mot.slice(0, -1);
+  return mot;
+}
+const UNITE_ALIAS = {gr:"g", gramme:"g", kilo:"kg", kilogramme:"kg",
+                     litre:"l", millilitre:"ml", centilitre:"cl", decilitre:"dl"};
+function normUnit(unit){
+  const u = singulier(norm(unit).replace(/[^a-z0-9]+/g, ""));
+  return UNITE_ALIAS[u] || u;
+}
+function normName(name){
+  const mots = norm(name).replace(/\u0153/g, "oe").replace(/\u00e6/g, "ae")
+    .replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
+  return mots.map(singulier).join(" ");
+}
+function itemKey(name, unit){ return normName(name) + "|" + normUnit(unit); }
 function fmtQty(n){
   if(n==null || isNaN(n)) return "";
   const r = Math.round(n*100)/100;
@@ -1284,7 +1333,7 @@ function parseRecipes(entree){
    Rien de tout cela n'est partagé — c'est propre à ce téléphone.
 ------------------------------------------------------------------- */
 const UI_TABS = ["recipes","list","week"];
-let ui = {tab:"recipes", scroll:0, closed:[]};
+let ui = {tab:"recipes", scroll:0, closed:[], week:false};
 
 function loadUI(){
   try{
@@ -1293,6 +1342,7 @@ function loadUI(){
       if(UI_TABS.indexOf(raw.tab) >= 0) ui.tab = raw.tab;
       if(typeof raw.scroll === "number" && raw.scroll >= 0) ui.scroll = raw.scroll;
       if(Array.isArray(raw.closed)) ui.closed = raw.closed.filter(x=>typeof x === "string");
+      if(typeof raw.week === "boolean") ui.week = raw.week;
     }
   }catch(e){}
 }
@@ -1382,7 +1432,7 @@ const LS_DATA = "panier.data.v1";
 const LS_CFG  = "panier.foyer.v1";
 const LS_UI   = "panier.ui.v1";
 const state = { recipes:new Map(), shopping:new Map(), plan:new Map(), rayons:new Map(), pantry:new Map(),
-                tab:"recipes", editing:null, ready:false, find:"", cat:"" };
+                tab:"recipes", editing:null, ready:false, find:"", cat:"", week:false };
 
 let localData = {recipes:{}, shopping:{}, plan:{}, rayons:{}, pantry:{}};
 let queue = [];
@@ -1520,6 +1570,7 @@ function onStream(ev){
     if(mergeDoc(parts[0], parts[1], data)) touched.add(parts[0]);
   }
   if(touched.size){ persist(); for(const col of touched) emit(col); }
+  if(touched.has("shopping")) fuseDuplicates();
   updateSync();
 }
 function connect(){
@@ -1594,6 +1645,85 @@ function itemFrom(it){
   if(hasOverride(it) && names.length) names.push("quantité ajustée");
   return names.join(" · ");
 }
+/* Le détail d'une ligne, pour l'éditeur : chaque recette qui la fournit et
+   ce qu'elle y met. C'est ce qui rend lisible un total venu de plusieurs
+   recettes — l'oignon de la bolognaise et celui du pilaf sur une ligne. */
+function itemParts(it){
+  const parts = [];
+  for(const [rid, q] of Object.entries(it.sources||{})){
+    const r = state.recipes.get(rid);
+    if(!r) continue;
+    parts.push({who:r.name || "Recette", qty:(q==null || isNaN(q)) ? null : Number(q)});
+  }
+  parts.sort((a,b)=> a.who.localeCompare(b.who, "fr"));
+  if(it.manualQty) parts.unshift({who:"Ajouté à la volée", qty:Number(it.manualQty)});
+  return parts;
+}
+/* Retrouve la ligne où poser un ingrédient : la ligne exacte d'abord, puis
+   une ligne équivalente — c'est elle qui évite le doublon « Oignon » /
+   « Oignons ». À plusieurs candidates, le plus petit identifiant l'emporte :
+   les deux téléphones désignent alors la même ligne, chacun de son côté. */
+function findItemId(name, unit){
+  const exact = itemId(name, unit);
+  if(state.shopping.has(exact)) return exact;
+  const cle = itemKey(name, unit);
+  let trouve = null;
+  for(const [iid, it] of state.shopping){
+    if(itemKey(it.name, it.unit) !== cle) continue;
+    if(trouve === null || iid < trouve) trouve = iid;
+  }
+  return trouve || exact;
+}
+/* Les doublons déjà dans la liste — écrits avant cette règle, ou arrivés de
+   l'autre téléphone — se fondent en une seule ligne : les quantités
+   s'additionnent et les recettes derrière chaque ligne se rejoignent. La
+   ligne qui survit est la même des deux côtés, les deux téléphones
+   convergent donc sans se contredire. */
+let enFusion = false;
+async function fuseDuplicates(){
+  if(enFusion) return false;
+  const groupes = new Map();
+  for(const [iid, it] of state.shopping){
+    const cle = itemKey(it.name, it.unit);
+    if(!groupes.has(cle)) groupes.set(cle, []);
+    groupes.get(cle).push(iid);
+  }
+  let fait = false;
+  enFusion = true;
+  try{
+    for(const ids of groupes.values()){
+      if(ids.length < 2) continue;
+      ids.sort();
+      const garde = state.shopping.get(ids[0]);
+      if(!garde) continue;
+      const fondu = Object.assign({}, garde, {sources:Object.assign({}, garde.sources||{})});
+      let manuel = Number(fondu.manualQty) || 0, done = !!fondu.done;
+      for(const autre of ids.slice(1)){
+        const it = state.shopping.get(autre);
+        if(!it) continue;
+        for(const [rid, q] of Object.entries(it.sources||{})){
+          const deja = fondu.sources[rid];
+          if(deja == null) fondu.sources[rid] = q;
+          else if(q != null) fondu.sources[rid] = Math.round((deja + q)*100)/100;
+        }
+        manuel += Number(it.manualQty) || 0;
+        /* Une seule des deux lignes encore à prendre suffit à garder la
+           ligne fondue à prendre. */
+        done = done && !!it.done;
+        if(it.createdAt && (!fondu.createdAt || it.createdAt < fondu.createdAt)) fondu.createdAt = it.createdAt;
+        await drop("shopping", autre);
+      }
+      fondu.manualQty = manuel;
+      fondu.done = done;
+      /* Les recettes derrière la ligne ont changé : un total réécrit à la
+         main ne vaut plus, il repart des ingrédients. */
+      delete fondu.qtyOverride;
+      await save("shopping", ids[0], fondu);
+      fait = true;
+    }
+  } finally { enFusion = false; }
+  return fait;
+}
 /* Tout ce qu'on ajoute à la volée est retenu : le nom tel qu'on l'écrit,
    son unité et son rayon — y compris corrigé après coup depuis la liste.
    L'article peut ensuite être coché, retiré, vidé avec les autres : la
@@ -1616,7 +1746,7 @@ async function remember(name, unit, rayon){
 
 async function addManual(name, qty, unit, rayon){
   if(!name) return;
-  const id = itemId(name, unit);
+  const id = findItemId(name, unit);
   const cur = state.shopping.get(id);
   const body = cur ? Object.assign({}, cur) : {name, unit:unit||"", rayon:rayon||guessRayon(name), sources:{}, manualQty:0, done:false, createdAt:Date.now()};
   body.sources = Object.assign({}, body.sources||{});
@@ -1635,12 +1765,22 @@ async function addManual(name, qty, unit, rayon){
 }
 async function recipeToList(recipe, servings){
   const factor = (servings||recipe.servings||1) / (recipe.servings||1);
+  /* Ce que cette recette a déjà posé sur chaque ligne : une recette qui
+     nomme deux fois le même ingrédient — « Oignon » puis « Oignons » — ne
+     tient que sur une ligne, où les deux quantités s'ajoutent. Et une
+     recette posée plusieurs fois dans la semaine n'écrit toujours qu'une
+     seule fois sous son nom : le total ne double pas. */
+  const pose = new Map();
   for(const ing of (recipe.ingredients||[])){
-    const id = itemId(ing.name, ing.unit);
+    const id = findItemId(ing.name, ing.unit);
     const cur = state.shopping.get(id);
     const body = cur ? Object.assign({}, cur) : {name:ing.name, unit:ing.unit||"", rayon:ing.rayon||guessRayon(ing.name), sources:{}, manualQty:0, done:false, createdAt:Date.now()};
     body.sources = Object.assign({}, body.sources||{});
-    body.sources[recipe.id] = ing.qty==null ? null : Math.round(ing.qty*factor*100)/100;
+    const part = ing.qty==null ? null : Math.round(ing.qty*factor*100)/100;
+    const deja = pose.get(id);
+    const total = (deja == null) ? part : (part == null ? deja : Math.round((deja + part)*100)/100);
+    pose.set(id, total);
+    body.sources[recipe.id] = total;
     delete body.qtyOverride;
     body.done = false;
     await save("shopping", id, body);
@@ -1681,6 +1821,10 @@ async function refreshRecipesInList(){
 const ICON_CHECK = '<svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 6.5"/></svg>';
 
 function render(){
+  /* Le filtre « Semaine » s'éteint de lui-même dès que plus aucun repas
+     n'est posé : sans cela l'écran des recettes resterait vide sans qu'on
+     sache pourquoi. */
+  if(state.week && !weekCounts().size){ state.week = false; ui.week = false; saveUI(); }
   renderHead();
   renderRecipes();
   renderList();
@@ -1698,9 +1842,10 @@ function renderHead(){
   const acts = $("#headActions");
   if(state.tab === "recipes"){
     const n = state.recipes.size;
-    const vu = (state.find || state.cat) ? recipesShown().length : n;
+    const filtre = state.find || state.cat || state.week;
+    const vu = filtre ? recipesShown().length : n;
     const cochees = [...state.recipes.values()].filter(r=>r.inList).length;
-    count.textContent = !n ? "" : ((state.find || state.cat) ? vu + " sur " + n : n + (n>1 ? " recettes" : " recette"));
+    count.textContent = !n ? "" : (filtre ? vu + " sur " + n : n + (n>1 ? " recettes" : " recette"));
     acts.innerHTML = (cochees ? '<button class="btn btn-quiet" data-act="uncheck-all">Tout décocher</button>' : "") +
       '<button class="btn" data-act="import-recipe" aria-label="Importer une recette" title="Importer une recette collée">' +
         '<svg viewBox="0 0 24 24"><path d="M12 4v10"/><path d="M8.5 11l3.5 3.5L15.5 11"/><path d="M5 19h14"/></svg></button>' +
@@ -1740,13 +1885,33 @@ function recipesFound(){
     norm(r.category || "").includes(q) ||
     (r.ingredients || []).some(i => norm(i.name).includes(q)));
 }
-function recipesShown(){
+/* Les repas de la semaine, comptés par recette. Une recette posée deux
+   fois y compte deux fois — ce chiffre s'affiche sur sa tuile — mais elle ne
+   verse ses ingrédients aux courses qu'une seule fois. */
+function weekCounts(){
+  const m = new Map();
+  for(const p of state.plan.values()){
+    if(!p || !p.recipeId) continue;
+    m.set(p.recipeId, (m.get(p.recipeId) || 0) + 1);
+  }
+  return m;
+}
+/* Ce que la recherche a retenu, puis, filtre « Semaine » allumé, les seules
+   recettes posées dans un repas de la semaine. */
+function recipesBase(){
   const found = recipesFound();
-  return state.cat ? found.filter(r => catOf(r) === state.cat) : found;
+  if(!state.week) return found;
+  const semaine = weekCounts();
+  return found.filter(r => semaine.has(r.id));
+}
+function recipesShown(){
+  const base = recipesBase();
+  return state.cat ? base.filter(r => catOf(r) === state.cat) : base;
 }
 
-function tileHTML(r, groupé){
+function tileHTML(r, groupé, repas){
   const meta = [];
+  if(repas) meta.push('<span class="cat wk">' + repas + ' repas</span>');
   if(r.category && !groupé) meta.push('<span class="cat">' + catPic(catOf(r)) + ' ' + esc(r.category) + '</span>');
   if(r.servings) meta.push('<span class="num">' + esc(r.servings) + ' pers.</span>');
   if(r.minutes) meta.push('<span class="num">' + esc(r.minutes) + ' min</span>');
@@ -1766,18 +1931,28 @@ function renderRecipes(){
   const ul = $("#recipeList");
   const box = $("#catFilters");
   const total = state.recipes.size;
-  const found = recipesFound();
+  const semaine = weekCounts();
+  const found = recipesBase();
 
-  /* pastilles de catégorie, comptées sur le résultat de la recherche */
+  /* pastilles de catégorie, comptées sur ce que le filtre laisse passer */
   const counts = new Map();
   for(const r of found) counts.set(catOf(r), (counts.get(catOf(r)) || 0) + 1);
   if(state.cat && !counts.has(state.cat)) state.cat = "";
   const cats = [...counts.keys()].sort((a,b)=> a.localeCompare(b, "fr"));
-  box.innerHTML = (total < 2 || (cats.length < 2 && !state.cat)) ? "" :
+  const pastillesCats = (total < 2 || (cats.length < 2 && !state.cat)) ? "" :
     '<button class="chip" data-act="cat-filter" data-cat="" aria-pressed="' + (state.cat ? "false" : "true") + '">' +
       'Toutes<span class="n">' + found.length + '</span></button>' +
     cats.map(c => '<button class="chip" data-act="cat-filter" data-cat="' + esc(c) + '" aria-pressed="' + (state.cat === c ? "true" : "false") + '">' +
       catPic(c) + ' ' + esc(c) + '<span class="n">' + counts.get(c) + '</span></button>').join("");
+  /* La pastille « Semaine » n'apparaît que lorsqu'un repas est posé ; son
+     compte est celui des recettes distinctes de la semaine, pas celui des
+     repas — une recette servie deux fois n'y figure qu'une fois. */
+  const pastilleSemaine = !semaine.size ? "" :
+    '<button class="chip week" data-act="week-filter" aria-pressed="' + (state.week ? "true" : "false") + '" ' +
+      'aria-label="Ne montrer que les recettes prévues cette semaine">' +
+      '📅 Semaine<span class="n">' + semaine.size + '</span></button>' +
+    (pastillesCats ? '<span class="chipsep" aria-hidden="true"></span>' : "");
+  box.innerHTML = pastilleSemaine + pastillesCats;
 
   if(!total){
     ul.innerHTML = '<li>' + (state.ready
@@ -1787,13 +1962,17 @@ function renderRecipes(){
   }
   const shown = recipesShown();
   if(!shown.length){
-    ul.innerHTML = '<li><div class="empty"><span class="pic" aria-hidden="true">🔍</span><strong>Rien ne correspond</strong>' +
-      'Aucune recette ne répond à cette recherche. Essayez un autre mot, ou le nom d’un ingrédient.</div></li>';
+    ul.innerHTML = '<li><div class="empty">' + (state.week
+      ? '<span class="pic" aria-hidden="true">📅</span><strong>Rien de prévu qui corresponde</strong>' +
+        'Ce filtre ne garde que les recettes posées dans un repas de la semaine. Touchez de nouveau « Semaine » pour revoir tout le carnet.'
+      : '<span class="pic" aria-hidden="true">🔍</span><strong>Rien ne correspond</strong>' +
+        'Aucune recette ne répond à cette recherche. Essayez un autre mot, ou le nom d’un ingrédient.') +
+      '</div></li>';
     return;
   }
   /* groupé par catégorie tant qu'aucune n'est sélectionnée */
   if(state.cat || cats.length < 2){
-    ul.innerHTML = shown.map(r => tileHTML(r, false)).join("");
+    ul.innerHTML = shown.map(r => tileHTML(r, false, semaine.get(r.id) || 0)).join("");
     return;
   }
   /* Chaque catégorie se replie d'une touche ; repliée, son en-tête dit
@@ -1810,7 +1989,7 @@ function renderRecipes(){
                 '<h3>' + catPic(c) + ' ' + esc(c) + '</h3><span class="rule"></span>' +
                 '<span class="n">' + (dans ? dans + " ✓ · " : "") + list.length + '</span>' +
               '</button></li>' +
-            (fermee ? "" : list.map(r => tileHTML(r, true)).join(""));
+            (fermee ? "" : list.map(r => tileHTML(r, true, semaine.get(r.id) || 0)).join(""));
   }
   ul.innerHTML = html;
 }
@@ -1856,6 +2035,7 @@ function renderList(){
     for(const it of list){
       const total = itemTotal(it);
       const from = itemFrom(it);
+      const parts = itemParts(it);
       const rk = byKey.has(it.rayon) ? it.rayon : "divers";
       html += '<li class="item' + (state.editing === it.id ? " editing" : "") + '" data-done="' + (it.done?1:0) + '" data-id="' + esc(it.id) + '">' +
         '<div class="item-row">' +
@@ -1867,6 +2047,13 @@ function renderList(){
           (total!=null ? '<span class="qty">' + esc(fmtQty(total) + (it.unit ? " " + it.unit : "")) + '</span>' : "") +
         '</div>' +
         '<div class="editor">' +
+          (parts.length ? '<div class="from">' +
+            '<span class="from-lab">Prévu avec</span><ul>' +
+            parts.map(p => '<li><span class="who">' + esc(p.who) + '</span>' +
+              (p.qty!=null ? '<span class="howmuch">' + esc(fmtQty(p.qty) + (it.unit ? " " + it.unit : "")) + '</span>' : "") +
+            '</li>').join("") + '</ul>' +
+            (hasOverride(it) ? '<p class="note">Quantité réécrite à la main : elle remplace ce total. Videz le champ pour la rendre au calcul.</p>' : "") +
+          '</div>' : "") +
           '<input type="number" step="any" min="0" name="qty" value="' + (total!=null?esc(total):"") + '" data-id="' + esc(it.id) + '" aria-label="Quantité" placeholder="qté">' +
           '<input name="unit" value="' + esc(it.unit||"") + '" data-id="' + esc(it.id) + '" aria-label="Unité" placeholder="unité">' +
           '<select name="rayon" data-id="' + esc(it.id) + '" aria-label="Rayon">' +
@@ -2483,6 +2670,12 @@ document.addEventListener("click", async (ev)=>{
     return;
   }
 
+  if(act === "week-filter"){
+    state.week = !state.week;
+    ui.week = state.week; saveUI();
+    renderHead(); renderRecipes();
+    return;
+  }
   if(act === "cat-filter"){
     state.cat = btn.dataset.cat || "";
     renderHead(); renderRecipes();
@@ -2669,8 +2862,10 @@ document.addEventListener("input", ev=>{
   }
   for(const col of COLS) state[col] = visible(col);
   state.ready = true;
+  state.week = !!ui.week;
   showTab(ui.tab);
   render();
+  fuseDuplicates();
   restoreScroll();
   updateSync();
   connect();

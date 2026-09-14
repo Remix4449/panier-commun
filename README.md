@@ -11,17 +11,24 @@ Une page, aucune dépendance, aucun compte à créer pour s'en servir.
   personnes, et une case à cocher sur la tuile qui verse les ingrédients dans
   la liste de courses (et les retire quand on la décoche, sans toucher à ce qui
   a été ajouté à la main) ; « Tout décocher » vide d'un coup ce que les
-  recettes y ont mis. La flèche ↓ en haut avale une recette venue d'ailleurs :
-  son texte brut, un lien d'import, ou du JSON.
+  recettes y ont mis. La pastille **Semaine** ne garde que les recettes posées
+  dans un repas de la semaine, et chaque tuile dit combien de repas elle y
+  occupe. La flèche ↓ en haut avale une recette venue d'ailleurs : son texte
+  brut, un lien d'import, ou du JSON.
 - **Courses** — triées par rayon dans l'ordre d'un parcours de magasin. La barre
   de recherche comprend la quantité au vol (« 2 kg pommes de terre »), devine le
   rayon et propose les ingrédients déjà connus — dont les deux cent dix-neuf
   produits du carnet, chacun avec le rayon où il se trouve. Ce qu'on ajoute à
   la volée est retenu — nom, unité, rayon corrigé — et reproposé plus tard,
   même une fois l'article coché puis retiré de la liste. Les quantités d'un
-  même ingrédient venant de plusieurs recettes s'additionnent.
+  même ingrédient venant de plusieurs recettes s'additionnent sur une seule
+  ligne, même quand les recettes ne l'écrivent pas pareil — « Oignon » et
+  « Oignons », « 200 gr » et « 200 g ». Toucher une ligne ouvre son détail :
+  les recettes qui la fournissent et ce que chacune y met.
 - **Semaine** — midi et soir sur sept jours, et un bouton qui envoie tous les
-  repas planifiés dans les courses.
+  repas planifiés dans les courses. Une même recette peut occuper plusieurs
+  repas : elle ne verse ses ingrédients qu'une fois, les quantités ne doublent
+  pas.
 
 Au rechargement, l'app rouvre l'onglet où l'on était, à la hauteur où l'on
 était. Et quand le clavier du téléphone s'ouvre, la page remonte pour garder le
