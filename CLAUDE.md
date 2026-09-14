@@ -93,6 +93,18 @@ souhaitable ici.
   (`recipes`, `shopping`, `plan`, `rayons`, `pantry`) : localStorage
   d'abord, puis file d'attente vers Firebase si un foyer est configuré.
   Tout passe par là, jamais par `localData` directement.
+- Une ligne de courses est retrouvée par `findItemId()`, jamais par
+  `itemId()` seul : `itemKey()` rapproche les écritures d'un même article
+  (pluriel, ligatures, ponctuation, unité dite autrement) pour que deux
+  recettes grossissent la même ligne au lieu d'en ouvrir deux.
+  `fuseDuplicates()` fond les doublons déjà en place — au démarrage et à
+  chaque arrivée de l'autre téléphone ; il garde toujours le plus petit
+  identifiant du groupe, ce qui fait converger les deux téléphones.
+- Le filtre « Semaine » de l'écran Recettes vit dans `state.week` (retenu
+  dans `panier.ui.v1`) : `weekCounts()` compte les repas par recette,
+  `recipesBase()` applique le filtre entre la recherche et les catégories.
+  Une recette posée sur plusieurs repas ne verse ses ingrédients qu'une
+  fois — `sources` est indexé par recette, pas par repas.
 - `pantry` est la mémoire des articles ajoutés à la volée — nom, unité,
   rayon corrigé. Elle sert les suggestions de la barre d'ajout et survit à
   la purge de la liste ; `remember()` l'alimente, plafonnée à 240 entrées.
