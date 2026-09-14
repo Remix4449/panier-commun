@@ -366,6 +366,11 @@ button{cursor:pointer;background:none;border:none;padding:0}
 .item-body{flex:1;min-width:0;text-align:left;padding:2px 0}
 .item-name{display:block;font-size:16px;line-height:1.3}
 .item-from{display:block;font-size:12px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 👋 : la ligne a été tapée dans la barre d'ajout, aucune recette ne la
+   demande. Sans ce repère, un article ajouté sans quantité n'affiche rien
+   sous son nom et se lit comme le reste d'une recette disparue. */
+.item-hand{font-size:13px;line-height:1;flex:none;opacity:.8}
+.item[data-done="1"] .item-hand{opacity:.4}
 .item[data-done="1"] .item-name{text-decoration:line-through;text-decoration-color:var(--ray);color:var(--muted)}
 .qty{
   font-family:"DM Mono",ui-monospace,monospace;font-size:13px;flex:none;font-weight:500;
@@ -1580,7 +1585,7 @@ function onStream(ev){
     if(mergeDoc(parts[0], parts[1], data)) touched.add(parts[0]);
   }
   if(touched.size){ persist(); for(const col of touched) emit(col); }
-  if(touched.has("shopping")) fuseDuplicates();
+  if(touched.has("shopping")) tidyShopping();
   updateSync();
 }
 function connect(){
@@ -1647,11 +1652,25 @@ function itemTotal(it){
   }
   return seen ? total : null;
 }
+/* `manual` : la ligne a été tapée dans la barre d'ajout. Le champ existe
+   parce que `manualQty` ne suffisait pas — « Ail », ajouté sans quantité,
+   vaut 0, et la ligne n'affichait alors rien du tout sous son nom. */
+function isManual(it){
+  return !!it && (it.manual === true || !!it.manualQty);
+}
+/* Les recettes citées par la ligne qui ne sont plus au carnet. Supprimer une
+   recette retire maintenant ses ingrédients, mais les lignes écrites avant
+   gardent la mention — et un téléphone qui n'a pas encore reçu la
+   suppression faite sur l'autre passe un instant par là. */
+function lostRecipes(it){
+  return Object.keys(it.sources||{}).filter(rid => !state.recipes.get(rid)).length;
+}
 function itemFrom(it){
   const names = Object.keys(it.sources||{}).map(rid=>{
     const r = state.recipes.get(rid); return r ? r.name : null;
   }).filter(Boolean);
-  if(it.manualQty) names.unshift("Ajouté à la volée");
+  if(lostRecipes(it)) names.push("Recette retirée");
+  if(isManual(it)) names.unshift("Ajouté à la volée");
   if(hasOverride(it) && names.length) names.push("quantité ajustée");
   return names.join(" · ");
 }
@@ -1659,30 +1678,88 @@ function itemFrom(it){
    ce qu'elle y met. C'est ce qui rend lisible un total venu de plusieurs
    recettes — l'oignon de la bolognaise et celui du pilaf sur une ligne. */
 function itemParts(it){
-  const parts = [];
+  const parts = [], perdues = [];
   for(const [rid, q] of Object.entries(it.sources||{})){
+    const qty = (q==null || isNaN(q)) ? null : Number(q);
     const r = state.recipes.get(rid);
-    if(!r) continue;
-    parts.push({who:r.name || "Recette", qty:(q==null || isNaN(q)) ? null : Number(q)});
+    if(r) parts.push({who:r.name || "Recette", qty});
+    else perdues.push({who:"Recette retirée", qty});
   }
   parts.sort((a,b)=> a.who.localeCompare(b.who, "fr"));
-  if(it.manualQty) parts.unshift({who:"Ajouté à la volée", qty:Number(it.manualQty)});
+  for(const p of perdues) parts.push(p);
+  if(isManual(it)) parts.unshift({who:"Ajouté à la volée", qty:Number(it.manualQty) || null});
   return parts;
+}
+/* Un pense-bête : l'article est écrit, mais rien n'est compté sous son nom.
+   Il peut donc rejoindre n'importe quelle ligne du même article sans en
+   fausser le total. */
+function isNote(it){
+  return normUnit(it.unit) === "" && itemTotal(it) == null;
 }
 /* Retrouve la ligne où poser un ingrédient : la ligne exacte d'abord, puis
    une ligne équivalente — c'est elle qui évite le doublon « Oignon » /
-   « Oignons ». À plusieurs candidates, le plus petit identifiant l'emporte :
-   les deux téléphones désignent alors la même ligne, chacun de son côté. */
-function findItemId(name, unit){
+   « Oignons ». À défaut, la ligne d'un simple pense-bête du même article :
+   « Ail » tapé dans la barre, sans unité ni quantité, rejoint les trois
+   gousses de la bolognaise au lieu d'ouvrir sa propre ligne. À plusieurs
+   candidates, le plus petit identifiant l'emporte : les deux téléphones
+   désignent alors la même ligne, chacun de son côté. */
+function findItemId(name, unit, qty){
   const exact = itemId(name, unit);
   if(state.shopping.has(exact)) return exact;
   const cle = itemKey(name, unit);
-  let trouve = null;
+  const nom = normName(name), u = normUnit(unit);
+  /* Hors du pense-bête, deux unités pour un même nom — 200 g et 1 kg de
+     farine — restent deux lignes : les additionner donnerait un total faux. */
+  const note = u === "" && qty == null;
+  let trouve = null, approche = null;
   for(const [iid, it] of state.shopping){
-    if(itemKey(it.name, it.unit) !== cle) continue;
-    if(trouve === null || iid < trouve) trouve = iid;
+    if(itemKey(it.name, it.unit) === cle){
+      if(trouve === null || iid < trouve) trouve = iid;
+      continue;
+    }
+    if(normName(it.name) !== nom) continue;
+    if(!note && !isNote(it)) continue;
+    if(approche === null || iid < approche) approche = iid;
   }
-  return trouve || exact;
+  return trouve || approche || exact;
+}
+/* L'unité manquait à la ligne, l'ingrédient qui arrive en porte une : la
+   ligne l'adopte, sans quoi « 3 gousses » s'afficherait sans son unité. */
+function adoptUnit(body, unit){
+  if(!body.unit && unit) body.unit = unit;
+  return body;
+}
+/* Les lignes à fondre, par paquets. Deux écritures d'un même article se
+   rejoignent quand leur clé complète est la même. Un pense-bête — ni unité
+   ni quantité — rejoint en plus la ligne du même article qui compte dans une
+   unité, puisqu'il n'ajoute aucun chiffre au total. Deux unités pour un même
+   nom restent deux lignes, et le pense-bête n'a alors pas de camp. */
+function duplicateGroups(){
+  const parNom = new Map();
+  for(const [iid, it] of state.shopping){
+    const nom = normName(it.name);
+    if(!parNom.has(nom)) parNom.set(nom, []);
+    parNom.get(nom).push(iid);
+  }
+  const groupes = [];
+  for(const ids of parNom.values()){
+    const parUnite = new Map();
+    for(const iid of ids){
+      const u = normUnit(state.shopping.get(iid).unit);
+      if(!parUnite.has(u)) parUnite.set(u, []);
+      parUnite.get(u).push(iid);
+    }
+    const unites = [...parUnite.keys()].filter(u => u !== "");
+    const sansUnite = parUnite.get("") || [];
+    if(unites.length !== 1){
+      for(const lot of parUnite.values()) groupes.push(lot);
+      continue;
+    }
+    const notes = sansUnite.filter(iid => isNote(state.shopping.get(iid)));
+    groupes.push(parUnite.get(unites[0]).concat(notes));
+    groupes.push(sansUnite.filter(iid => notes.indexOf(iid) < 0));
+  }
+  return groupes.filter(g => g.length > 1);
 }
 /* Les doublons déjà dans la liste — écrits avant cette règle, ou arrivés de
    l'autre téléphone — se fondent en une seule ligne : les quantités
@@ -1692,22 +1769,22 @@ function findItemId(name, unit){
 let enFusion = false;
 async function fuseDuplicates(){
   if(enFusion) return false;
-  const groupes = new Map();
-  for(const [iid, it] of state.shopping){
-    const cle = itemKey(it.name, it.unit);
-    if(!groupes.has(cle)) groupes.set(cle, []);
-    groupes.get(cle).push(iid);
-  }
+  const groupes = duplicateGroups();
   let fait = false;
   enFusion = true;
   try{
-    for(const ids of groupes.values()){
-      if(ids.length < 2) continue;
+    for(const ids of groupes){
       ids.sort();
       const garde = state.shopping.get(ids[0]);
       if(!garde) continue;
       const fondu = Object.assign({}, garde, {sources:Object.assign({}, garde.sources||{})});
-      let manuel = Number(fondu.manualQty) || 0, done = !!fondu.done;
+      let manuel = Number(fondu.manualQty) || 0, done = !!fondu.done, main = isManual(fondu);
+      /* La ligne qui survit porte l'unité du groupe : l'ail noté à la volée
+         rejoint les gousses de la bolognaise, pas l'inverse. */
+      if(!fondu.unit){
+        const avecUnite = ids.map(i => state.shopping.get(i)).find(it => it && it.unit);
+        if(avecUnite) fondu.unit = avecUnite.unit;
+      }
       for(const autre of ids.slice(1)){
         const it = state.shopping.get(autre);
         if(!it) continue;
@@ -1717,6 +1794,7 @@ async function fuseDuplicates(){
           else if(q != null) fondu.sources[rid] = Math.round((deja + q)*100)/100;
         }
         manuel += Number(it.manualQty) || 0;
+        main = main || isManual(it);
         /* Une seule des deux lignes encore à prendre suffit à garder la
            ligne fondue à prendre. */
         done = done && !!it.done;
@@ -1725,6 +1803,7 @@ async function fuseDuplicates(){
       }
       fondu.manualQty = manuel;
       fondu.done = done;
+      if(main) fondu.manual = true;
       /* Les recettes derrière la ligne ont changé : un total réécrit à la
          main ne vaut plus, il repart des ingrédients. */
       delete fondu.qtyOverride;
@@ -1733,6 +1812,24 @@ async function fuseDuplicates(){
     }
   } finally { enFusion = false; }
   return fait;
+}
+/* Les lignes écrites avant que `manual` existe : aucune recette derrière,
+   elles ne peuvent venir que de la barre d'ajout. On les marque une fois
+   pour toutes, sinon elles resteraient sans 👋. */
+async function markHandAdded(){
+  for(const [id, it] of [...state.shopping]){
+    if(it.manual !== undefined) continue;
+    if(Object.keys(it.sources||{}).length) continue;
+    await save("shopping", id, Object.assign({}, it, {manual:true}));
+  }
+}
+/* Le ménage de la liste, et l'ordre compte : marquer d'abord, fondre
+   ensuite. L'inverse perdrait le 👋 de l'article ajouté à la main le jour
+   où une recette vient tenir la même ligne — fondu, il n'a plus l'air de
+   venir de nulle part, et plus rien ne dit qu'on l'avait tapé. */
+async function tidyShopping(){
+  await markHandAdded();
+  await fuseDuplicates();
 }
 /* Tout ce qu'on ajoute à la volée est retenu : le nom tel qu'on l'écrit,
    son unité et son rayon — y compris corrigé après coup depuis la liste.
@@ -1756,11 +1853,18 @@ async function remember(name, unit, rayon){
 
 async function addManual(name, qty, unit, rayon){
   if(!name) return;
-  const id = findItemId(name, unit);
+  const id = findItemId(name, unit, qty);
   const cur = state.shopping.get(id);
   const body = cur ? Object.assign({}, cur) : {name, unit:unit||"", rayon:rayon||guessRayon(name), sources:{}, manualQty:0, done:false, createdAt:Date.now()};
   body.sources = Object.assign({}, body.sources||{});
-  const add = (qty==null ? (itemTotal(body)==null ? null : 1) : qty);
+  adoptUnit(body, unit);
+  /* Sans quantité, on ajoute une unité de plus à ce qui est déjà prévu —
+     « œufs » sur une ligne de 6 en fait 7. Mais pas quand la ligne compte
+     dans une autre unité que celle tapée : « farine » sur 200 g ne vaut
+     pas 201 g, la ligne est seulement remise à prendre. */
+  const memeUnite = normUnit(unit) === normUnit(body.unit);
+  const add = qty!=null ? qty
+            : (itemTotal(body)==null ? null : (memeUnite ? 1 : null));
   if(add!=null){
     body.manualQty = (Number(body.manualQty)||0) + add;
     // quantité déjà réécrite à la main : on la complète, sinon l'ajout
@@ -1768,6 +1872,7 @@ async function addManual(name, qty, unit, rayon){
     if(hasOverride(body)) body.qtyOverride = (Number(body.qtyOverride)||0) + add;
   }
   body.done = false;
+  body.manual = true;
   body.name = body.name || name;
   await save("shopping", id, body);
   await remember(body.name, body.unit, body.rayon);
@@ -1782,10 +1887,11 @@ async function recipeToList(recipe, servings){
      seule fois sous son nom : le total ne double pas. */
   const pose = new Map();
   for(const ing of (recipe.ingredients||[])){
-    const id = findItemId(ing.name, ing.unit);
+    const id = findItemId(ing.name, ing.unit, ing.qty);
     const cur = state.shopping.get(id);
     const body = cur ? Object.assign({}, cur) : {name:ing.name, unit:ing.unit||"", rayon:ing.rayon||guessRayon(ing.name), sources:{}, manualQty:0, done:false, createdAt:Date.now()};
     body.sources = Object.assign({}, body.sources||{});
+    adoptUnit(body, ing.unit);
     const part = ing.qty==null ? null : Math.round(ing.qty*factor*100)/100;
     const deja = pose.get(id);
     const total = (deja == null) ? part : (part == null ? deja : Math.round((deja + part)*100)/100);
@@ -1804,7 +1910,7 @@ async function recipeOffList(recipe){
     delete sources[recipe.id];
     // plus aucune recette derrière la ligne, et rien d'ajouté à la volée :
     // elle quitte la liste, quantité retouchée ou non
-    if(Object.keys(sources).length === 0 && !it.manualQty){ await drop("shopping", id); continue; }
+    if(Object.keys(sources).length === 0 && !isManual(it)){ await drop("shopping", id); continue; }
     const reste = Object.assign({}, it, {sources});
     delete reste.qtyOverride;
     await save("shopping", id, reste);
@@ -2065,6 +2171,7 @@ function renderList(){
             '<span class="n">' + left + "/" + list.length + '</span></div><ul class="items">';
     for(const it of list){
       const total = itemTotal(it);
+      const main = isManual(it);
       const from = itemFrom(it);
       const parts = itemParts(it);
       const rk = byKey.has(it.rayon) ? it.rayon : "divers";
@@ -2075,6 +2182,7 @@ function renderList(){
             '<span class="item-name">' + esc(it.name) + '</span>' +
             (from ? '<span class="item-from">' + esc(from) + '</span>' : "") +
           '</button>' +
+          (main ? '<span class="item-hand" title="Ajouté à la main" aria-label="Ajouté à la main" role="img">👋</span>' : "") +
           (total!=null ? '<span class="qty">' + esc(fmtQty(total) + (it.unit ? " " + it.unit : "")) + '</span>' : "") +
         '</div>' +
         '<div class="editor">' +
@@ -2642,7 +2750,10 @@ document.addEventListener("click", async (ev)=>{
   }
   if(act === "del-recipe"){
     const r = state.recipes.get(id); if(!r) return;
-    if(r.inList) await recipeOffList(r);
+    /* Ses ingrédients quittent les courses d'abord, que la recette se
+       sache cochée ou non : une ligne qui la cite encore resterait sinon
+       sur la liste sans plus rien pour dire d'où elle vient. */
+    await recipeOffList(r);
     await drop("recipes", id);
     for(const [slotId, p] of state.plan){ if(p.recipeId === id) await drop("plan", slotId); }
     closeSheet(); toast("Recette supprimée");
@@ -2912,7 +3023,7 @@ document.addEventListener("input", ev=>{
   state.scope = ui.scope;
   showTab(ui.tab);
   render();
-  fuseDuplicates();
+  tidyShopping();
   restoreScroll();
   updateSync();
   connect();

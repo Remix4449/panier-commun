@@ -24,8 +24,12 @@ Une page, aucune dépendance, aucun compte à créer pour s'en servir.
   même une fois l'article coché puis retiré de la liste. Les quantités d'un
   même ingrédient venant de plusieurs recettes s'additionnent sur une seule
   ligne, même quand les recettes ne l'écrivent pas pareil — « Oignon » et
-  « Oignons », « 200 gr » et « 200 g ». Toucher une ligne ouvre son détail :
-  les recettes qui la fournissent et ce que chacune y met.
+  « Oignons », « 200 gr » et « 200 g ». Un article tapé sans quantité rejoint
+  de même la ligne qu'une recette tient déjà : « ail » retrouve les trois
+  gousses de la bolognaise au lieu d'ouvrir une seconde ligne. Il garde un 👋,
+  qui distingue d'un coup d'œil ce qu'on a ajouté soi-même de ce qui vient
+  d'une recette. Toucher une ligne ouvre son détail : les recettes qui la
+  fournissent et ce que chacune y met.
 - **Semaine** — midi et soir sur sept jours, et un bouton qui envoie tous les
   repas planifiés dans les courses. Un repas ne se choisit que parmi les
   recettes cochées dans l'onglet Recettes : la semaine se compose d'abord dans
