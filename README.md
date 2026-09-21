@@ -15,7 +15,10 @@ Une page, aucune dépendance, aucun compte à créer pour s'en servir.
   que les recettes cochées aux courses, **Semaine** que celles posées sur un
   repas ; l'une éteint l'autre, et chaque tuile dit combien de repas elle
   occupe. La flèche ↓ en haut avale une recette venue d'ailleurs : son texte
-  brut, un lien d'import, ou du JSON.
+  brut, un lien d'import, ou du JSON. Le bouton 🖼 à côté fait l'inverse : il
+  compose une image JPEG de la liste des repas cochés — les noms, rien
+  d'autre, sur le papier chaud de l'app — à partager ou à ranger dans les
+  photos du téléphone.
 - **Courses** — triées par rayon dans l'ordre du parcours en magasin, des
   produits ménagers aux boissons ; « Gérer les rayons », en bas de la liste,
   retouche cet ordre, renomme un rayon ou en ajoute un. La barre

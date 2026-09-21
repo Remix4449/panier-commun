@@ -148,6 +148,18 @@ souhaitable ici.
   recettes normalisées ; `openRecipeForm(id, brouillon)` les affiche pour
   relecture ; `saveImported()` enregistre sans relecture (bouton « Tout
   ajouter »).
+- L'export en image vit sous l'intertitre `/* --- export en image --- */` :
+  `exporterRecettes(liste)` dessine la liste des repas sur un canvas, puis
+  ouvre la feuille qui la partage ou l'enregistre ; `exChoisies()` donne les
+  recettes cochées. L'image porte les noms et rien d'autre — pas
+  d'ingrédients, pas de préparation : c'est une demande, pas un oubli. La
+  page se dessine en deux passes sur les mêmes fonctions (`peindre` faux
+  mesure, vrai peint), qui doivent avancer des mêmes hauteurs. Deux choses ne
+  se touchent pas sans y penser : le papier reste clair quel que soit le
+  thème du téléphone — une image partagée se lit chez l'autre —, et le
+  partage part de la touche sans rien calculer entre les deux, seule façon
+  qu'iOS ouvre sa feuille. Le `CACHE` de `sw.js` est à incrémenter comme pour
+  tout le reste.
 - `PRODUITS` (les aliments du foyer, par rayon) alimente `PRODUIT_RAYON`,
   que `guessRayon()` consulte avant ses mots-clés : un ingrédient du carnet
   est rangé sans devinette.
