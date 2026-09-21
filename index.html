@@ -765,19 +765,37 @@ button{cursor:pointer;background:none;border:none;padding:0}
 "use strict";
 
 /* ---------------------------------------------------------------
-   Rayons : l'ordre est celui d'un parcours de magasin classique.
+   Rayons : l'ordre est celui du parcours en magasin — on part des
+   produits ménagers et on finit aux boissons. C'est lui qui décide
+   de l'ordre des sections de la liste de courses ; « Gérer les
+   rayons » permet de le retoucher sur place.
 --------------------------------------------------------------- */
 const RAYONS_DEFAUT = [
-  ["fruits",      "Fruits & légumes",         "🥬", "leaf"],
-  ["boucherie",   "Boucherie & poissonnerie", "🥩", "rose"],
-  ["cremerie",    "Crémerie & œufs",          "🧀", "amber"],
-  ["boulangerie", "Boulangerie",              "🥖", "crust"],
-  ["epicerie",    "Épicerie salée",           "🥫", "olive"],
-  ["sucre",       "Épicerie sucrée",          "🍫", "berry"],
-  ["surgeles",    "Surgelés",                 "🧊", "ice"],
-  ["boissons",    "Boissons",                 "🥤", "indigo"],
-  ["maison",      "Entretien & maison",       "🧽", "teal"],
-  ["divers",      "Divers",                   "🧺", "stone"]
+  ["maison",      "Produits ménagers",           "🧽", "teal"],
+  ["beaute",      "Soins & beauté",              "🧴", "rose"],
+  ["bebe",        "Bébé & protections",          "🍼", "indigo"],
+  ["coton",       "Coton & sérum physiologique", "🩹", "ice"],
+  ["papier",      "Papier toilette & Sopalin",   "🧻", "stone"],
+  ["gouter",      "Pain de mie & goûter",        "🍞", "crust"],
+  ["conserves",   "Conserves",                   "🥫", "olive"],
+  ["epicerie",    "Huiles, sauces & condiments", "🫒", "leaf"],
+  ["pates",       "Pâtes & sauce tomate",        "🍝", "amber"],
+  ["riz",         "Riz & féculents",             "🍚", "crust"],
+  ["bonbons",     "Bonbons",                     "🍬", "berry"],
+  ["chips",       "Chips & épices",              "🥨", "olive"],
+  ["cereales",    "Céréales & pâte à tartiner",  "🥜", "crust"],
+  ["sucre",       "Sucre & pâtisserie",          "🍫", "berry"],
+  ["monde",       "Produits du monde",           "🌍", "indigo"],
+  ["cafe",        "Café & petit-déjeuner",       "☕", "crust"],
+  ["oeufs",       "Œufs",                        "🥚", "amber"],
+  ["boucherie",   "Viande & poisson",            "🥩", "rose"],
+  ["traiteur",    "Galettes & entrées",          "🥟", "olive"],
+  ["cremerie",    "Fromage & yaourts",           "🧀", "amber"],
+  ["fruits",      "Fruits & légumes",            "🥬", "leaf"],
+  ["surgeles",    "Surgelés",                    "🧊", "ice"],
+  ["boulangerie", "Boulangerie",                 "🥖", "crust"],
+  ["boissons",    "Boissons",                    "🥤", "indigo"],
+  ["divers",      "Divers",                      "🧺", "stone"]
 ];
 const RAYONS_DEFAUT_CLES = new Set(RAYONS_DEFAUT.map(r => r[0]));
 
@@ -879,6 +897,63 @@ async function saveRayon(key, name, pic, swatch){
   await save("rayons", key, Object.assign({}, cur, {name, pic, swatch}));
   return key;
 }
+/* L'ordre des rayons a été réécrit pour suivre le parcours en magasin.
+   Un rang enregistré du temps de l'ordre précédent l'emporterait sur le
+   nouveau : on l'efface une fois par téléphone, en gardant le nom, le
+   pictogramme et la teinte qu'on avait retouchés. Les rayons ajoutés à
+   la main gardent leur rang, et un rang posé après coup depuis « Gérer
+   les rayons » n'est plus jamais touché. */
+async function alignerParcours(){
+  if(ui.parcours) return;
+  ui.parcours = true;
+  saveUI(true);
+  for(const [key, o] of [...state.rayons]){
+    if(!RAYONS_DEFAUT_CLES.has(key) || o.order == null) continue;
+    const body = Object.assign({}, o);
+    delete body.order;
+    await save("rayons", key, body);
+  }
+  await rangerSurLeNouveauParcours();
+}
+/* Le découpage des rayons a changé sous les articles déjà écrits : le riz
+   et les pâtes ne sont plus rangés avec les condiments, les œufs ne sont
+   plus avec les fromages. On repasse donc une fois sur les lignes de
+   courses et sur les ingrédients du carnet. Trois garde-fous : le rayon
+   corrigé à la main, que le garde-manger retient, l'emporte toujours ; un
+   article posé dans un rayon que vous avez ajouté vous-même n'est jamais
+   délogé ; un nom que l'app ne sait pas deviner reste où il est plutôt
+   que de tomber dans Divers. */
+function relecteurDeRayon(){
+  const corrige = new Map();
+  for(const p of state.pantry.values()){
+    if(p.name && p.rayon) corrige.set(norm(p.name), p.rayon);
+  }
+  const ajoutes = new Set([...state.rayons.keys()].filter(k => !RAYONS_DEFAUT_CLES.has(k)));
+  return (nom, actuel)=>{
+    if(!nom || ajoutes.has(actuel)) return actuel;
+    const fixe = corrige.get(norm(nom));
+    if(fixe) return fixe;
+    const vu = guessRayon(nom);
+    return vu === "divers" ? actuel : vu;
+  };
+}
+async function rangerSurLeNouveauParcours(){
+  const revoir = relecteurDeRayon();
+  for(const [id, it] of [...state.shopping]){
+    const r = revoir(it.name, it.rayon);
+    if(r && r !== it.rayon) await save("shopping", id, Object.assign({}, it, {rayon:r}));
+  }
+  for(const [id, rec] of [...state.recipes]){
+    let bouge = false;
+    const ings = (rec.ingredients || []).map(ing => {
+      const r = revoir(ing.name, ing.rayon);
+      if(!r || r === ing.rayon) return ing;
+      bouge = true;
+      return Object.assign({}, ing, {rayon:r});
+    });
+    if(bouge) await save("recipes", id, Object.assign({}, rec, {ingredients:ings}));
+  }
+}
 /* Supprimer un rayon ajouté : ce qu'il contenait retombe dans Divers,
    pour qu'aucun article ni ingrédient ne disparaisse de la liste. */
 async function delRayon(key){
@@ -896,15 +971,30 @@ async function delRayon(key){
 }
 
 const GUESS = {
+  maison:["lessive","liquide vaisselle","tablette lave-vaisselle","produit de rincage","eponge","sac poubelle","nettoyant","javel","adoucissant","desodorisant","vinaigre menager","aluminium","papier cuisson","film etirable","serpilliere","balai","ampoule","pile","sacs poubelle"],
+  beaute:["savon","shampoing","shampooing","apres-shampoing","gel douche","dentifrice","brosse a dents","bain de bouche","fil dentaire","deodorant","rasoir","mousse a raser","creme solaire","creme hydratante","parfum","maquillage","vernis"],
+  bebe:["couche","protection hygienique","serviette hygienique","tampon","lingette","liniment","petit pot","lait infantile","biberon","tetine"],
+  coton:["coton","serum physiologique","pansement","compresse","desinfectant","paracetamol"],
+  papier:["papier toilette","essuie-tout","essuie tout","sopalin","mouchoir"],
+  gouter:["pain de mie","gouter","biscuit","pitch","madeleine","barre de cereales","compote","gaufre","speculoos","quatre-quarts","petit ecolier"],
+  conserves:["conserve","en boite","boite de","mais","haricot blanc","flageolet","petits pois","ravioli","cassoulet","sardine","tomate pelee","tomate concassee","macedoine"],
+  epicerie:["huile","vinaigre","sel","poivre","moutarde","ketchup","mayonnaise","sauce","cornichon","olive","bouillon","cube","chapelure","crouton","vinaigrette","anchois","capre","tahin","harissa","bechamel","fond de veau"],
+  pates:["pate","spaghetti","tagliatelle","penne","macaroni","lasagne","farfalle","fusilli","coquillette","gnocchi","tortellini","crozet","sauce tomate","coulis de tomate","concentre de tomate","pesto","passata"],
+  riz:["riz","semoule","couscous","lentille","pois chiche","haricot sec","quinoa","boulgour","polenta","epeautre"],
+  bonbons:["bonbon","dragee","haribo","carambar","chewing-gum","sucette","guimauve","reglisse","malabar","fraise tagada"],
+  chips:["chips","curly","bretzel","tuile","cacahuete","pistache","noix","noix de cajou","apero","epice","paprika","curry","cumin","curcuma","cannelle","muscade","safran","piment","gomasio","origan","herbes de provence"],
+  cereales:["pate a tartiner","nutella","beurre de cacahuete","confiture","miel","sirop d'erable","gelee de","creme de marron"],
+  sucre:["sucre","chocolat","farine","levure","vanille","cacao","poudre d'amande","amande","noisette","raisin sec","praline","meringue","bicarbonate","maizena","fecule","colorant","pepites de chocolat","nappage"],
+  monde:["tortilla","wrap","nem","nouille","soja","sauce soja","nuoc","tikka","tandoori","lait de coco","sesame","huile de sesame","samossa","galette de riz","feuille de brick","bo bun","sauce aigre-douce","taco","fajita","guacamole","pousses de haricots","vermicelle de riz"],
+  cafe:["cafe","the","infusion","cereale","granola","muesli","chicoree","capsule","dosette","filtre a cafe","lait en poudre","porridge"],
+  oeufs:["oeuf","œuf"],
+  boucherie:["poulet","boeuf","steak","hache","porc","jambon","lardon","saucisse","merguez","agneau","veau","dinde","canard","escalope","cote de","roti","saumon","cabillaud","thon frais","crevette","moule","poisson","truite","colin","lieu","bacon","chorizo","andouille","boudin","gigot","poitrine","filet mignon","magret","noix de saint","calamar","dorade","maquereau"],
+  traiteur:["galette","crepe","blini","surimi","tarama","tzatziki","houmous","feuillete","quiche","friand","saumon fume","pizza fraiche","brandade","taboule"],
+  cremerie:["lait","beurre","creme","yaourt","fromage","gruyere","emmental","parmesan","comte","mozzarella","chevre","feta","ricotta","mascarpone","raclette","camembert","roquefort","skyr","petit suisse","cancoillotte","bleu","brebis","boursin","fromage blanc","creme dessert","pate feuilletee","pate brisee","pate a pizza"],
   fruits:["tomate","salade","laitue","roquette","carotte","courgette","aubergine","poireau","oignon","echalote","ail","pomme de terre","patate","champignon","brocoli","chou","haricot vert","epinard","poivron","concombre","radis","navet","celeri","potiron","courge","butternut","betterave","fenouil","citron","orange","clementine","pomme","poire","banane","fraise","framboise","myrtille","raisin","peche","abricot","melon","pasteque","kiwi","ananas","mangue","avocat","persil","basilic","coriandre","menthe","ciboulette","thym","romarin","laurier","gingembre","petit pois frais","asperge","artichaut","endive","mache","cresson","rhubarbe","figue","prune","cerise"],
-  boucherie:["poulet","boeuf","steak","hache","porc","jambon","lardon","saucisse","merguez","agneau","veau","dinde","canard","escalope","cote de","roti","saumon","cabillaud","thon frais","crevette","moule","poisson","truite","colin","lieu","sardine","bacon","chorizo","andouille","boudin","gigot","poitrine","filet mignon","magret","noix de saint","calamar","dorade","maquereau"],
-  cremerie:["lait","beurre","creme","yaourt","fromage","gruyere","emmental","parmesan","comte","mozzarella","chevre","feta","oeuf","ricotta","mascarpone","raclette","camembert","roquefort","skyr","petit suisse","cancoillotte","bleu","brebis","pate feuilletee","pate brisee","pate a pizza"],
-  boulangerie:["pain","baguette","brioche","croissant","biscotte","wrap","tortilla","pita","viennoiserie","chapelure","pain de mie"],
-  epicerie:["pate","spaghetti","tagliatelle","penne","macaroni","lasagne","riz","semoule","couscous","lentille","pois chiche","haricot sec","quinoa","boulgour","farine","huile","vinaigre","sel","poivre","moutarde","ketchup","mayonnaise","sauce","concentre de tomate","tomate pelee","tomate concassee","conserve","thon","bouillon","curry","paprika","cumin","curcuma","herbes","olive","cornichon","mais","soja","lait de coco","polenta","nouille","cube","fecule","maizena","piment","muscade","cannelle","safran","gomasio","tahin","harissa","pesto","anchois","capre","noix de cajou"],
-  sucre:["sucre","chocolat","miel","confiture","biscuit","gateau","levure","vanille","cereale","compote","bonbon","amande","noisette","noix","raisin sec","sirop","cacao","creme dessert","pate a tartiner","madeleine","speculoos","meringue","praline"],
-  surgeles:["surgele","glace","petits pois","poelee","frite","epinards surgeles","nuggets","pizza surgelee","sorbet"],
-  boissons:["eau","jus","vin","biere","soda","cafe","the","infusion","limonade","lait d'amande","lait de soja","cidre","champagne","sirop de menthe","perrier","coca"],
-  maison:["papier toilette","essuie-tout","lessive","liquide vaisselle","eponge","sac poubelle","savon","shampoing","dentifrice","mouchoir","gel douche","nettoyant","deodorant","couche","coton","aluminium","papier cuisson","adoucissant","javel","filtre"]
+  surgeles:["surgele","glace","poelee","frite","nuggets","pizza surgelee","sorbet","epinards surgeles","puree surgelee","pommes noisettes","petits pois surgeles","haricots verts surgeles"],
+  boulangerie:["pain","baguette","brioche","croissant","biscotte","pita","viennoiserie","chausson","pain au chocolat","fougasse","ciabatta"],
+  boissons:["eau","jus","vin","biere","soda","limonade","lait d'amande","lait de soja","cidre","champagne","sirop de menthe","perrier","coca","ice tea","pastis","whisky","rhum","punch","kombucha"]
 };
 
 /* ---------------------------------------------------------------
@@ -914,15 +1004,30 @@ const GUESS = {
    GUESS reste derrière, pour tout ce qui n'y figure pas encore.
 --------------------------------------------------------------- */
 const PRODUITS = {
-  "fruits":["Ail","Asperges","Avocat","Banane","Basilic","Brocoli","Butternut","Carottes","Champignons","Ciboulette","Citron","Clémentine","Concombre","Courgette","Échalotes","Épinard","Haricots verts","Menthe","Oignons","Patate douce","Poireau","Poivron rouge","Pomme de terre","Pommes","Pommes Pink Lady","Potimarron","Raisin","Salade","Tomates"],
+  "maison":["Éponge","Filtre à café","Javel","Lave-vitre","Lessive","Liquide vaisselle","Nettoyant lave-vaisselle","Nettoyant machine","Papier cuisson","Produit de rinçage","Produits nettoyants","Sacs poubelle 50 l","Sacs poubelle blancs","Tablettes lave-vaisselle","Vaniche","Vinaigre ménager"],
+  "beaute":["Brosse à dents","Dentifrice","Déo mo","Shampooing"],
+  "bebe":["Cotocouches","Couche","Protection hygiénique"],
+  "coton":["Coton carré","Coton-tige","Pansement","Sérum physiologique"],
+  "papier":["Papier toilette","Sopalin"],
+  "gouter":["Gâteau Michel et Augustin","Gaufres chocolat","Pain à burger","Pain de mie","Pitch"],
+  "conserves":["Petits pois","Thon en boîte","Tomates en conserve"],
+  "epicerie":["Béchamel","Bouillon","Chapelure","Croûtons","Huile","Huile d'olive","Moutarde","Olives vertes","Pignons de pin","Sauce barbecue","Sauce césar","Vinaigrette"],
+  "pates":["Concentré de tomate","Coulis de tomate","Crozet","Feuilles de lasagne","Gnocchis","Pesto","Purée de tomate","Pâtes","Sauce tomate","Spaghettis","Tagliatelles","Tomates séchées"],
+  "riz":["Lentilles","Lentilles corail","Riz","Riz à la tomate","Riz à risotto","Riz à sushi","Semoule"],
+  "bonbons":[],
+  "chips":["3D","Bretzel","Cacahuète","Cannelle","Chips","Chips au vinaigre","Chips oignons","Croustille Belin","Cumin","Curly","Curry","Estragon","Graines et trucs","Muscade","Noix","Paprika","Pistache","Safran","Tuiles","Épices tandoori","Épices à fajitas"],
+  "cereales":["Beurre de cacahuètes","Miel","Sirop d'érable"],
+  "sucre":["Bicarbonate de sodium","Biscuits à la cuillère","Cacao","Caramel","Chocolat","Dessert","Farine","Levure chimique","Maïzena","Poudre d'amande","Sucre","Sucre glace","Sucre roux","Sucre vanillé","Vanille liquide"],
+  "monde":["Feuilles de brick","Galette à burritos","Graines de sésame","Huile de sésame","Lait de coco","Nems","Nouilles chinoises","Nouilles de riz","Pousses de haricots","Sauce aigre-douce","Sauce nuoc-mâm","Sauce soja","Sauce tikka","Tortillas"],
+  "cafe":["Café","Café GTA","Café froid","Granola","Thé fruits rouges"],
+  "oeufs":["Œufs"],
   "boucherie":["Bavette d'Aloyau","Blanc de poulet","Boeuf haché","Cabillaud","Chair à saucisse","Chorizo","Coppa","Cordon bleu","Dés de jambon","Filet de poulet","Jambon blanc","Jambon de Bayonne","Lard","Lardons","Pancetta","Saucisses","Saumon"],
-  "cremerie":["Beurre","Beurre pommade","Boursin","Bûche de chèvre","Cheddar râpé","Comté","Crème","Crème fleurette","Crème fraîche","Crème liquide","Crottin de chavignol","Feta","Fromage de chèvre frais","Fromage président","Galette de sarrasin","Gorgonzola","Gruyère","Houmous","Lait","Mascarpone","Mozzarella","Mozzarella râpée","Parmesan","Petit-déjeuner fromage","Raclette","Reblochon","Ricotta","Roquefort","Vache qui rit","Yaourt grec","Œufs"],
-  "boulangerie":["Pain","Préfou"],
-  "epicerie":["3D","Béchamel","Beurre de cacahuètes","Bicarbonate de sodium","Bouillon","Bretzel","Cacahuète","Cannelle","Chapelure","Chips","Chips au vinaigre","Chips oignons","Concentré de tomate","Coulis de tomate","Croustille Belin","Croûtons","Crozet","Cumin","Curly","Curry","Épices à fajitas","Épices tandoori","Estragon","Feuilles de brick","Feuilles de lasagne","Galette à burritos","Gnocchis","Graines de sésame","Graines et trucs","Huile","Huile d'olive","Huile de sésame","Lait de coco","Lentilles","Lentilles corail","Maïzena","Moutarde","Muscade","Nems","Noix","Nouilles chinoises","Nouilles de riz","Olives vertes","Pain à burger","Pain de mie","Paprika","Pâte à pizza","Pâte brisée","Pâtes","Pesto","Petits pois","Pignons de pin","Pistache","Pousses de haricots","Purée de tomate","Riz","Riz à la tomate","Riz à risotto","Riz à sushi","Safran","Sauce aigre-douce","Sauce barbecue","Sauce césar","Sauce nuoc-mâm","Sauce soja","Sauce tikka","Sauce tomate","Semoule","Spaghettis","Tagliatelles","Thon en boîte","Tomates en conserve","Tomates séchées","Tortillas","Tuiles","Vinaigrette"],
-  "sucre":["Biscuits à la cuillère","Cacao","Café froid","Caramel","Chocolat","Dessert","Farine","Gâteau Michel et Augustin","Gaufres chocolat","Granola","Levure chimique","Miel","Pitch","Poudre d'amande","Sirop d'érable","Sucre","Sucre glace","Sucre roux","Sucre vanillé","Vanille liquide"],
+  "traiteur":["Galette de sarrasin","Houmous","Préfou"],
+  "cremerie":["Beurre","Beurre pommade","Boursin","Bûche de chèvre","Cheddar râpé","Comté","Crème","Crème fleurette","Crème fraîche","Crème liquide","Crottin de chavignol","Feta","Fromage de chèvre frais","Fromage président","Gorgonzola","Gruyère","Lait","Mascarpone","Mozzarella","Mozzarella râpée","Parmesan","Petit-déjeuner fromage","Pâte brisée","Pâte à pizza","Raclette","Reblochon","Ricotta","Roquefort","Vache qui rit","Yaourt grec"],
+  "fruits":["Ail","Asperges","Avocat","Banane","Basilic","Brocoli","Butternut","Carottes","Champignons","Ciboulette","Citron","Clémentine","Concombre","Courgette","Échalotes","Épinard","Haricots verts","Menthe","Oignons","Patate douce","Poireau","Poivron rouge","Pomme de terre","Pommes","Pommes Pink Lady","Potimarron","Raisin","Salade","Tomates"],
   "surgeles":["Flammenkueche","Pommes noisettes","Pommes rissolées","Purée surgelée"],
-  "boissons":["Bière","Café","Café GTA","Eau","Soft","Thé fruits rouges","Tourtel","Vin blanc","Vin rouge"],
-  "maison":["Brosse à dents","Cotocouches","Coton carré","Coton-tige","Couche","Dentifrice","Déo mo","Éponge","Filtre à café","Javel","Lave-vitre","Lessive","Liquide vaisselle","Nettoyant lave-vaisselle","Nettoyant machine","Pansement","Papier cuisson","Papier toilette","Produit de rinçage","Produits nettoyants","Protection hygiénique","Sacs poubelle 50 l","Sacs poubelle blancs","Sérum physiologique","Shampooing","Sopalin","Tablettes lave-vaisselle","Vaniche","Vinaigre ménager"],
+  "boulangerie":["Pain"],
+  "boissons":["Bière","Eau","Soft","Tourtel","Vin blanc","Vin rouge"],
   "divers":["Porte-vues","Tube de colle"]
 };
 
@@ -940,139 +1045,139 @@ const CATEGORIES = ["Healthy","Plaisir","Plat","Entrée","Dessert","Petit-déj",
    manquantes sur un téléphone déjà en service. */
 const STARTERS = [
   {id:"bo-bun-aux-nems",name:"Bo Bun aux nems",category:"Plaisir",servings:2,minutes:30,inList:false,
-   ingredients:[{name:"Nems",qty:4,unit:"",rayon:"epicerie"},{name:"Nouilles de riz",qty:100,unit:"g",rayon:"epicerie"},{name:"Carottes",qty:1,unit:"",rayon:"fruits"},{name:"Concombre",qty:0.5,unit:"",rayon:"fruits"},{name:"Menthe",qty:null,unit:"",rayon:"fruits"},{name:"Cacahuète",qty:2,unit:"cs",rayon:"epicerie"},{name:"Sauce nuoc-mâm",qty:null,unit:"",rayon:"epicerie"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
+   ingredients:[{name:"Nems",qty:4,unit:"",rayon:"monde"},{name:"Nouilles de riz",qty:100,unit:"g",rayon:"monde"},{name:"Carottes",qty:1,unit:"",rayon:"fruits"},{name:"Concombre",qty:0.5,unit:"",rayon:"fruits"},{name:"Menthe",qty:null,unit:"",rayon:"fruits"},{name:"Cacahuète",qty:2,unit:"cs",rayon:"chips"},{name:"Sauce nuoc-mâm",qty:null,unit:"",rayon:"monde"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
    steps:["Faites cuire les nouilles de riz selon les instructions du paquet, égouttez et rincez à l'eau froide.","Faites chauffer l'huile dans une poêle et dorez les nems de tous les côtés, puis égouttez-les sur du papier absorbant.","Épluchez et taillez les carottes en julienne, coupez le concombre en fines lamelles, ciselez la menthe.","Répartissez les nouilles dans deux bols, ajoutez les carottes, le concombre et les nems coupés en morceaux.","Parsemez de menthe et de cacahuètes concassées, servez avec la sauce nuoc-mâm."]},
   {id:"boulettes-riz-a-l-italienne",name:"Boulettes & riz à l'italienne",category:"Plaisir",servings:2,minutes:17,inList:false,
-   ingredients:[{name:"Boeuf haché",qty:300,unit:"g",rayon:"boucherie"},{name:"Riz à la tomate",qty:220,unit:"g",rayon:"epicerie"},{name:"Sauce tomate",qty:200,unit:"g",rayon:"epicerie"},{name:"Oignons",qty:0.5,unit:"",rayon:"fruits"},{name:"Ail",qty:1,unit:"gousse",rayon:"fruits"},{name:"Parmesan",qty:40,unit:"g",rayon:"cremerie"},{name:"Huile d'olive",qty:2,unit:"cc",rayon:"epicerie"}],
+   ingredients:[{name:"Boeuf haché",qty:300,unit:"g",rayon:"boucherie"},{name:"Riz à la tomate",qty:220,unit:"g",rayon:"riz"},{name:"Sauce tomate",qty:200,unit:"g",rayon:"pates"},{name:"Oignons",qty:0.5,unit:"",rayon:"fruits"},{name:"Ail",qty:1,unit:"gousse",rayon:"fruits"},{name:"Parmesan",qty:40,unit:"g",rayon:"cremerie"},{name:"Huile d'olive",qty:2,unit:"cc",rayon:"epicerie"}],
    steps:["Épluchez et ciselez finement l'oignon rouge, râpez la gousse d'ail.","Dans un saladier, mélangez le bœuf haché, l'oignon et l'ail râpé, salez et poivrez, puis formez les boulettes.","Faites chauffer un filet d'huile d'olive dans une poêle à feu vif et faites revenir les boulettes 5 minutes en remuant.","Ajoutez la sauce tomate et un petit fond d'eau, couvrez et laissez mijoter 5 minutes à feu doux.","Pendant ce temps, préparez le riz selon les instructions du paquet.","Servez le riz avec les boulettes et le parmesan râpé."]},
   {id:"coquillettes-brocoli-et-epinards",name:"Coquillettes, brocoli et épinards",category:"Healthy",servings:2,minutes:20,inList:false,
-   ingredients:[{name:"Pâtes",qty:200,unit:"g",rayon:"epicerie"},{name:"Brocoli",qty:1,unit:"tête",rayon:"fruits"},{name:"Épinard",qty:100,unit:"g",rayon:"fruits"},{name:"Crème fraîche",qty:5,unit:"cl",rayon:"cremerie"},{name:"Parmesan",qty:30,unit:"g",rayon:"cremerie"},{name:"Ail",qty:1,unit:"gousse",rayon:"fruits"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
+   ingredients:[{name:"Pâtes",qty:200,unit:"g",rayon:"pates"},{name:"Brocoli",qty:1,unit:"tête",rayon:"fruits"},{name:"Épinard",qty:100,unit:"g",rayon:"fruits"},{name:"Crème fraîche",qty:5,unit:"cl",rayon:"cremerie"},{name:"Parmesan",qty:30,unit:"g",rayon:"cremerie"},{name:"Ail",qty:1,unit:"gousse",rayon:"fruits"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
    steps:["Faites cuire les coquillettes dans une casserole d'eau bouillante salée, égouttez et réservez.","Coupez le brocoli en petits bouquets et lavez les épinards.","Dans une poêle, faites revenir l'ail émincé à l'huile d'olive, ajoutez le brocoli et laissez cuire 5 minutes à feu moyen.","Jetez les épinards dedans et laissez-les tomber 2 minutes.","Ajoutez les coquillettes égouttées, versez la crème fraîche et mélangez.","Parsemez de parmesan râpé et servez chaud."]},
   {id:"croque-monsieur-au-four",name:"Croque-monsieur au four",category:"Plaisir",servings:2,minutes:20,inList:false,
-   ingredients:[{name:"Pain de mie",qty:4,unit:"tranches",rayon:"epicerie"},{name:"Jambon blanc",qty:4,unit:"tranches",rayon:"boucherie"},{name:"Fromage président",qty:8,unit:"tranches",rayon:"cremerie"},{name:"Beurre",qty:20,unit:"g",rayon:"cremerie"}],
+   ingredients:[{name:"Pain de mie",qty:4,unit:"tranches",rayon:"gouter"},{name:"Jambon blanc",qty:4,unit:"tranches",rayon:"boucherie"},{name:"Fromage président",qty:8,unit:"tranches",rayon:"cremerie"},{name:"Beurre",qty:20,unit:"g",rayon:"cremerie"}],
    steps:["Préchauffez le four à 200 °C.","Étalez une fine couche de béchamel sur chaque tranche de pain de mie.","Déposez une tranche de jambon sur deux des tranches, refermez avec les tranches restantes.","Parsemez de fromage râpé sur le dessus de chaque croque.","Déposez-les sur une plaque garnie de papier cuisson et enfournez 10 à 12 minutes, jusqu'à ce que le fromage soit gratiné.","Servez chaud avec une salade verte ou des cornichons."]},
   {id:"croziflette-aux-lardons-et-au-reblochon",name:"Croziflette aux lardons et au reblochon",category:"Plaisir",servings:4,minutes:45,inList:false,
-   ingredients:[{name:"Crozet",qty:400,unit:"g",rayon:"epicerie"},{name:"Lardons",qty:200,unit:"g",rayon:"boucherie"},{name:"Reblochon",qty:1,unit:"",rayon:"cremerie"},{name:"Oignons",qty:1,unit:"",rayon:"fruits"},{name:"Crème fraîche",qty:20,unit:"cl",rayon:"cremerie"},{name:"Vin blanc",qty:5,unit:"cl",rayon:"boissons"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
+   ingredients:[{name:"Crozet",qty:400,unit:"g",rayon:"pates"},{name:"Lardons",qty:200,unit:"g",rayon:"boucherie"},{name:"Reblochon",qty:1,unit:"",rayon:"cremerie"},{name:"Oignons",qty:1,unit:"",rayon:"fruits"},{name:"Crème fraîche",qty:20,unit:"cl",rayon:"cremerie"},{name:"Vin blanc",qty:5,unit:"cl",rayon:"boissons"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
    steps:["Préchauffez le four à 200 °C.","Faites cuire les crozets dans une casserole d'eau bouillante salée, égouttez et réservez.","Émincez l'oignon, puis faites-le revenir avec les lardons et un filet d'huile d'olive jusqu'à ce qu'ils dorent.","Dans un plat à gratin, mélangez les crozets, les lardons et les oignons, versez la crème fraîche et le vin blanc.","Coupez le reblochon en deux dans le sens de l'épaisseur et posez-le sur le dessus.","Enfournez 20 à 25 minutes, jusqu'à ce que le fromage soit fondu et gratiné.","Servez chaud avec une salade verte."]},
   {id:"gratin-de-gnocchis-au-brocoli",name:"Gratin de gnocchis au brocoli",category:"Healthy",servings:2,minutes:30,inList:false,
-   ingredients:[{name:"Gnocchis",qty:250,unit:"g",rayon:"epicerie"},{name:"Brocoli",qty:1,unit:"tête",rayon:"fruits"},{name:"Ricotta",qty:100,unit:"g",rayon:"cremerie"},{name:"Parmesan",qty:30,unit:"g",rayon:"cremerie"},{name:"Ail",qty:1,unit:"gousse",rayon:"fruits"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
+   ingredients:[{name:"Gnocchis",qty:250,unit:"g",rayon:"pates"},{name:"Brocoli",qty:1,unit:"tête",rayon:"fruits"},{name:"Ricotta",qty:100,unit:"g",rayon:"cremerie"},{name:"Parmesan",qty:30,unit:"g",rayon:"cremerie"},{name:"Ail",qty:1,unit:"gousse",rayon:"fruits"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
    steps:["Préchauffez le four à 200 °C.","Faites cuire les gnocchis dans une casserole d'eau bouillante salée.","Coupez le brocoli en fleurettes et faites-les précuire à la vapeur 5 minutes.","Dans une poêle, faites revenir l'ail à l'huile d'olive, ajoutez les gnocchis et le brocoli, mélangez.","Répartissez le mélange dans un plat à gratin, ajoutez la ricotta et le parmesan râpé.","Enfournez 10 à 15 minutes, jusqu'à ce que le dessus soit gratiné."]},
   {id:"lasagnes-vegetariennes",name:"Lasagnes végétariennes",category:"Healthy",servings:4,minutes:50,inList:false,
-   ingredients:[{name:"Feuilles de lasagne",qty:180,unit:"g",rayon:"epicerie"},{name:"Purée de tomate",qty:600,unit:"g",rayon:"epicerie"},{name:"Mozzarella râpée",qty:200,unit:"g",rayon:"cremerie"},{name:"Oignons",qty:1,unit:"",rayon:"fruits"},{name:"Béchamel",qty:40,unit:"cl",rayon:"epicerie"},{name:"Lentilles",qty:400,unit:"g",rayon:"epicerie"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
+   ingredients:[{name:"Feuilles de lasagne",qty:180,unit:"g",rayon:"pates"},{name:"Purée de tomate",qty:600,unit:"g",rayon:"pates"},{name:"Mozzarella râpée",qty:200,unit:"g",rayon:"cremerie"},{name:"Oignons",qty:1,unit:"",rayon:"fruits"},{name:"Béchamel",qty:40,unit:"cl",rayon:"epicerie"},{name:"Lentilles",qty:400,unit:"g",rayon:"riz"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
    steps:["Préchauffez le four à 180 °C.","Épluchez et émincez finement l'oignon.","Faites-le revenir 2 minutes à feu vif dans un filet d'huile d'olive, ajoutez les lentilles et la purée de tomates, salez, poivrez, ajoutez le thym.","Mélangez et laissez cuire 3 minutes à feu doux.","Dans un plat à gratin, alternez trois couches de sauce aux lentilles, béchamel, mozzarella et feuilles de lasagnes crues.","Terminez par une couche de béchamel et de mozzarella, puis enfournez 40 minutes.","Servez avec une salade verte assaisonnée."]},
   {id:"nouilles-aux-champignons-et-sesame",name:"Nouilles aux champignons et sésame",category:"Healthy",servings:2,minutes:20,inList:false,
-   ingredients:[{name:"Nouilles chinoises",qty:200,unit:"g",rayon:"epicerie"},{name:"Champignons",qty:150,unit:"g",rayon:"fruits"},{name:"Sauce soja",qty:2,unit:"cs",rayon:"epicerie"},{name:"Huile de sésame",qty:1,unit:"cs",rayon:"epicerie"},{name:"Graines de sésame",qty:1,unit:"cs",rayon:"epicerie"},{name:"Ail",qty:1,unit:"gousse",rayon:"fruits"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
+   ingredients:[{name:"Nouilles chinoises",qty:200,unit:"g",rayon:"monde"},{name:"Champignons",qty:150,unit:"g",rayon:"fruits"},{name:"Sauce soja",qty:2,unit:"cs",rayon:"monde"},{name:"Huile de sésame",qty:1,unit:"cs",rayon:"monde"},{name:"Graines de sésame",qty:1,unit:"cs",rayon:"monde"},{name:"Ail",qty:1,unit:"gousse",rayon:"fruits"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
    steps:["Faites cuire les nouilles chinoises selon les instructions du paquet, égouttez et réservez.","Lavez et coupez les champignons en lamelles, émincez la gousse d'ail.","Dans une poêle, faites chauffer un filet d'huile d'olive et faites revenir l'ail, ajoutez les champignons et laissez cuire 5 minutes à feu moyen.","Ajoutez les nouilles égouttées, versez la sauce soja et l'huile de sésame, mélangez.","Parsemez de graines de sésame et servez chaud."]},
   {id:"parmentier-de-saumon-brocolis-et-comte",name:"Parmentier de saumon, brocolis et comté",category:"Healthy",servings:2,minutes:45,inList:false,
    ingredients:[{name:"Saumon",qty:2,unit:"filets",rayon:"boucherie"},{name:"Brocoli",qty:1,unit:"tête",rayon:"fruits"},{name:"Pomme de terre",qty:400,unit:"g",rayon:"fruits"},{name:"Comté",qty:50,unit:"g",rayon:"cremerie"},{name:"Crème fraîche",qty:10,unit:"cl",rayon:"cremerie"},{name:"Lait",qty:5,unit:"cl",rayon:"cremerie"},{name:"Beurre",qty:20,unit:"g",rayon:"cremerie"}],
    steps:["Préchauffez le four à 180 °C.","Dans une poêle, faites cuire les filets de saumon à feu moyen avec un peu de beurre, 4 à 5 minutes de chaque côté, puis réservez.","Épluchez et coupez les pommes de terre en morceaux, faites-les cuire 15 minutes à l'eau bouillante salée.","Égouttez-les et écrasez-les en purée avec le lait, la crème fraîche et le beurre, salez et poivrez.","Coupez le brocoli en fleurettes et faites-les cuire 5 à 7 minutes à la vapeur.","Dans un plat à gratin, déposez le saumon émietté et les brocolis, recouvrez de purée et parsemez de comté râpé.","Enfournez 20 minutes, jusqu'à ce que le dessus soit gratiné."]},
   {id:"poke-bowl-au-poulet",name:"Poke bowl au poulet",category:"Plaisir",servings:2,minutes:20,inList:false,
-   ingredients:[{name:"Riz à sushi",qty:150,unit:"g",rayon:"epicerie"},{name:"Filet de poulet",qty:200,unit:"g",rayon:"boucherie"},{name:"Avocat",qty:1,unit:"",rayon:"fruits"},{name:"Concombre",qty:0.5,unit:"",rayon:"fruits"},{name:"Carottes",qty:1,unit:"",rayon:"fruits"},{name:"Sauce soja",qty:2,unit:"cs",rayon:"epicerie"},{name:"Huile de sésame",qty:1,unit:"cs",rayon:"epicerie"},{name:"Graines de sésame",qty:1,unit:"cc",rayon:"epicerie"},{name:"Citron",qty:0.5,unit:"",rayon:"fruits"}],
+   ingredients:[{name:"Riz à sushi",qty:150,unit:"g",rayon:"riz"},{name:"Filet de poulet",qty:200,unit:"g",rayon:"boucherie"},{name:"Avocat",qty:1,unit:"",rayon:"fruits"},{name:"Concombre",qty:0.5,unit:"",rayon:"fruits"},{name:"Carottes",qty:1,unit:"",rayon:"fruits"},{name:"Sauce soja",qty:2,unit:"cs",rayon:"monde"},{name:"Huile de sésame",qty:1,unit:"cs",rayon:"monde"},{name:"Graines de sésame",qty:1,unit:"cc",rayon:"monde"},{name:"Citron",qty:0.5,unit:"",rayon:"fruits"}],
    steps:["Rincez le riz à sushi et faites-le cuire selon les instructions du paquet.","Coupez le poulet en petits morceaux, mélangez la sauce soja, l'huile de sésame et le jus de citron vert, puis laissez mariner 15 minutes.","Faites revenir le poulet mariné dans une poêle chaude 5 minutes.","Épluchez et taillez la carotte en julienne, coupez le concombre en fines rondelles, pelez et tranchez l'avocat.","Répartissez le riz dans deux bols, ajoutez le poulet, les légumes et l'avocat, parsemez de graines de sésame.","Servez avec un filet de sauce soja et d'huile de sésame."]},
   {id:"poulet-salade-d-ete",name:"Poulet & salade d'été",category:"Healthy",servings:2,minutes:12,inList:false,
    ingredients:[{name:"Filet de poulet",qty:2,unit:"",rayon:"boucherie"},{name:"Tomates",qty:10,unit:"",rayon:"fruits"},{name:"Avocat",qty:1,unit:"",rayon:"fruits"},{name:"Salade",qty:1,unit:"",rayon:"fruits"},{name:"Citron",qty:0.5,unit:"",rayon:"fruits"},{name:"Huile d'olive",qty:4,unit:"cs",rayon:"epicerie"},{name:"Basilic",qty:null,unit:"",rayon:"fruits"}],
    steps:["Dans une poêle, faites cuire les escalopes de poulet avec un filet d'huile d'olive, 4 minutes de chaque côté, salez et poivrez.","Lavez et coupez les tomates cerises en deux, pelez et coupez l'avocat en cubes.","Mélangez le jus de citron vert avec 2 cuillères à soupe d'huile d'olive, du sel et du poivre.","Dans un saladier, mélangez la roquette avec la moitié de la vinaigrette, ajoutez les tomates et l'avocat avec le reste.","Servez le poulet avec la salade et le basilic ciselé."]},
   {id:"poulet-au-sesame-haricots-verts-riz",name:"Poulet au sésame, haricots verts & riz",category:"Healthy",servings:2,minutes:19,inList:false,
-   ingredients:[{name:"Filet de poulet",qty:2,unit:"",rayon:"boucherie"},{name:"Haricots verts",qty:200,unit:"g",rayon:"fruits"},{name:"Riz",qty:200,unit:"g",rayon:"epicerie"},{name:"Sauce soja",qty:2,unit:"cs",rayon:"epicerie"},{name:"Huile de sésame",qty:2,unit:"cc",rayon:"epicerie"},{name:"Sauce aigre-douce",qty:2,unit:"cs",rayon:"epicerie"},{name:"Maïzena",qty:2,unit:"cc",rayon:"epicerie"},{name:"Oignons",qty:1,unit:"",rayon:"fruits"}],
+   ingredients:[{name:"Filet de poulet",qty:2,unit:"",rayon:"boucherie"},{name:"Haricots verts",qty:200,unit:"g",rayon:"fruits"},{name:"Riz",qty:200,unit:"g",rayon:"riz"},{name:"Sauce soja",qty:2,unit:"cs",rayon:"monde"},{name:"Huile de sésame",qty:2,unit:"cc",rayon:"monde"},{name:"Sauce aigre-douce",qty:2,unit:"cs",rayon:"monde"},{name:"Maïzena",qty:2,unit:"cc",rayon:"sucre"},{name:"Oignons",qty:1,unit:"",rayon:"fruits"}],
    steps:["Coupez le poulet en morceaux, poivrez et parsemez de maïzena.","Dans un bol, mélangez la sauce soja, l'huile de sésame et la sauce aigre-douce.","Faites cuire les haricots verts 10 à 12 minutes à l'eau bouillante salée, égouttez et réservez.","Faites chauffer un filet d'huile dans une poêle à feu moyen et faites cuire le poulet 4 à 5 minutes en remuant.","Ajoutez la sauce au sésame et poursuivez la cuisson 2 à 3 minutes, jusqu'à ce qu'elle épaississe.","Réchauffez le riz, puis servez le poulet avec le riz et les haricots verts, et les oignons nouveaux ciselés."]},
   {id:"poulet-et-salade-d-ete",name:"Poulet et salade d'été",category:"Healthy",servings:2,minutes:20,inList:false,
    ingredients:[{name:"Filet de poulet",qty:2,unit:"",rayon:"boucherie"},{name:"Salade",qty:100,unit:"g",rayon:"fruits"},{name:"Tomates",qty:10,unit:"",rayon:"fruits"},{name:"Concombre",qty:0.5,unit:"",rayon:"fruits"},{name:"Feta",qty:50,unit:"g",rayon:"cremerie"},{name:"Olives vertes",qty:10,unit:"",rayon:"epicerie"},{name:"Vinaigrette",qty:null,unit:"",rayon:"epicerie"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
    steps:["Coupez les filets de poulet en morceaux et faites-les cuire 6 à 8 minutes à feu moyen dans un filet d'huile d'olive, salez et poivrez.","Lavez et séchez la salade verte, coupez les tomates cerise en deux, épluchez et coupez le concombre en rondelles, détaillez la feta en dés.","Dans un saladier, mélangez la salade, les tomates, le concombre, les olives et la feta.","Ajoutez le poulet encore chaud sur la salade.","Arrosez de vinaigrette et mélangez délicatement."]},
   {id:"poulet-sauce-miel-moutarde-legumes-rotis",name:"Poulet sauce miel moutarde & légumes rôtis",category:"Healthy",servings:2,minutes:50,inList:false,
-   ingredients:[{name:"Filet de poulet",qty:2,unit:"",rayon:"boucherie"},{name:"Patate douce",qty:1,unit:"",rayon:"fruits"},{name:"Courgette",qty:1,unit:"",rayon:"fruits"},{name:"Oignons",qty:0.5,unit:"",rayon:"fruits"},{name:"Miel",qty:1,unit:"cs",rayon:"sucre"},{name:"Moutarde",qty:1,unit:"cs",rayon:"epicerie"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
+   ingredients:[{name:"Filet de poulet",qty:2,unit:"",rayon:"boucherie"},{name:"Patate douce",qty:1,unit:"",rayon:"fruits"},{name:"Courgette",qty:1,unit:"",rayon:"fruits"},{name:"Oignons",qty:0.5,unit:"",rayon:"fruits"},{name:"Miel",qty:1,unit:"cs",rayon:"cereales"},{name:"Moutarde",qty:1,unit:"cs",rayon:"epicerie"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
    steps:["Préchauffez le four à 200 °C.","Coupez la patate douce et la courgette en morceaux, émincez l'oignon rouge, mélangez-les avec un filet d'huile d'olive, du sel et du poivre, puis enfournez 20 minutes.","Mélangez le miel et la moutarde dans un bol.","Dans une poêle, faites cuire les escalopes de poulet avec un filet d'huile d'olive, badigeonnez-les de sauce miel-moutarde et faites-les dorer des deux côtés.","Servez le poulet avec les légumes rôtis."]},
   {id:"poulet-fondue-de-poireaux-penne",name:"Poulet, fondue de poireaux & penne",category:"Healthy",servings:2,minutes:30,inList:false,
-   ingredients:[{name:"Pâtes",qty:200,unit:"g",rayon:"epicerie"},{name:"Poireau",qty:2,unit:"",rayon:"fruits"},{name:"Filet de poulet",qty:2,unit:"",rayon:"boucherie"},{name:"Boursin",qty:1,unit:"sachet",rayon:"cremerie"},{name:"Beurre",qty:null,unit:"",rayon:"cremerie"}],
+   ingredients:[{name:"Pâtes",qty:200,unit:"g",rayon:"pates"},{name:"Poireau",qty:2,unit:"",rayon:"fruits"},{name:"Filet de poulet",qty:2,unit:"",rayon:"boucherie"},{name:"Boursin",qty:1,unit:"sachet",rayon:"cremerie"},{name:"Beurre",qty:null,unit:"",rayon:"cremerie"}],
    steps:["Faites cuire les penne dans une casserole d'eau bouillante salée, égouttez et réservez au chaud.","Coupez les extrémités des poireaux pour ne garder que le blanc, émincez-les finement et rincez-les abondamment.","Dans une poêle, faites fondre une noisette de beurre, ajoutez les poireaux et faites-les revenir 2 minutes à feu vif.","Baissez à feu moyen, ajoutez le fromage ail & fines herbes, mélangez, couvrez et laissez mijoter 7 à 8 minutes.","Dans une autre poêle, faites fondre une noisette de beurre et grillez le filet de poulet 4 à 5 minutes de chaque côté, salez et poivrez.","Servez les pâtes avec la fondue de poireaux et le poulet."]},
   {id:"rice-power-bowl",name:"Rice power bowl",category:"Healthy",servings:2,minutes:17,inList:false,
-   ingredients:[{name:"Riz",qty:150,unit:"g",rayon:"epicerie"},{name:"Avocat",qty:1,unit:"",rayon:"fruits"},{name:"Œufs",qty:2,unit:"",rayon:"cremerie"},{name:"Sauce soja",qty:1,unit:"cs",rayon:"epicerie"},{name:"Ciboulette",qty:null,unit:"",rayon:"fruits"},{name:"Huile d'olive",qty:2,unit:"cc",rayon:"epicerie"}],
+   ingredients:[{name:"Riz",qty:150,unit:"g",rayon:"riz"},{name:"Avocat",qty:1,unit:"",rayon:"fruits"},{name:"Œufs",qty:2,unit:"",rayon:"oeufs"},{name:"Sauce soja",qty:1,unit:"cs",rayon:"monde"},{name:"Ciboulette",qty:null,unit:"",rayon:"fruits"},{name:"Huile d'olive",qty:2,unit:"cc",rayon:"epicerie"}],
    steps:["Faites cuire le riz selon les instructions du paquet, puis égouttez-le.","Pendant ce temps, épluchez et tranchez l'avocat en fines lamelles, émincez la ciboulette.","Faites cuire les œufs au plat à feu doux 2 à 3 minutes dans un filet d'huile d'olive.","Assaisonnez le riz avec la sauce soja et la ciboulette ciselée, salez et poivrez.","Servez le riz avec les lamelles d'avocat et les œufs au plat."]},
   {id:"salade-de-chevre-chaud",name:"Salade de chèvre chaud",category:"Healthy",servings:2,minutes:20,inList:false,
-   ingredients:[{name:"Salade",qty:100,unit:"g",rayon:"fruits"},{name:"Bûche de chèvre",qty:1,unit:"",rayon:"cremerie"},{name:"Pain de mie",qty:2,unit:"tranches",rayon:"epicerie"},{name:"Miel",qty:1,unit:"cs",rayon:"sucre"},{name:"Noix",qty:null,unit:"",rayon:"epicerie"}],
+   ingredients:[{name:"Salade",qty:100,unit:"g",rayon:"fruits"},{name:"Bûche de chèvre",qty:1,unit:"",rayon:"cremerie"},{name:"Pain de mie",qty:2,unit:"tranches",rayon:"gouter"},{name:"Miel",qty:1,unit:"cs",rayon:"cereales"},{name:"Noix",qty:null,unit:"",rayon:"chips"}],
    steps:["Préchauffez le four à 180 °C.","Coupez la bûche de chèvre en rondelles et déposez-les sur les tranches de pain, arrosez d'un filet de miel.","Enfournez les toasts 5 à 10 minutes, jusqu'à ce que le fromage soit fondu et légèrement doré.","Lavez et assaisonnez la salade verte avec la vinaigrette, ajoutez les cerneaux de noix.","Servez les toasts chauds sur la salade."]},
   {id:"salade-de-pates-facon-cesar",name:"Salade de pâtes façon césar",category:"Healthy",servings:2,minutes:14,inList:false,
-   ingredients:[{name:"Pâtes",qty:200,unit:"g",rayon:"epicerie"},{name:"Pain de mie",qty:2,unit:"tranches",rayon:"epicerie"},{name:"Filet de poulet",qty:150,unit:"g",rayon:"boucherie"},{name:"Salade",qty:1,unit:"",rayon:"fruits"},{name:"Parmesan",qty:30,unit:"g",rayon:"cremerie"},{name:"Sauce césar",qty:3,unit:"cs",rayon:"epicerie"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
+   ingredients:[{name:"Pâtes",qty:200,unit:"g",rayon:"pates"},{name:"Pain de mie",qty:2,unit:"tranches",rayon:"gouter"},{name:"Filet de poulet",qty:150,unit:"g",rayon:"boucherie"},{name:"Salade",qty:1,unit:"",rayon:"fruits"},{name:"Parmesan",qty:30,unit:"g",rayon:"cremerie"},{name:"Sauce césar",qty:3,unit:"cs",rayon:"epicerie"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
    steps:["Faites cuire les pâtes dans une casserole d'eau bouillante salée, puis égouttez.","Coupez le pain en petits cubes et faites-les dorer 3 minutes à la poêle dans un filet d'huile d'olive, réservez.","Lavez et coupez la salade en morceaux.","Dans un saladier, mélangez les pâtes, la salade, le poulet émincé et les croûtons.","Arrosez de sauce césar et ajoutez des copeaux de parmesan."]},
   {id:"saumon-bbq-haricots-patates-douces-rotis",name:"Saumon BBQ, haricots & patates douces rôtis",category:"Healthy",servings:2,minutes:45,inList:false,
-   ingredients:[{name:"Saumon",qty:2,unit:"",rayon:"boucherie"},{name:"Patate douce",qty:200,unit:"g",rayon:"fruits"},{name:"Haricots verts",qty:200,unit:"g",rayon:"fruits"},{name:"Sauce barbecue",qty:2,unit:"cs",rayon:"epicerie"},{name:"Paprika",qty:2,unit:"pincées",rayon:"epicerie"},{name:"Huile d'olive",qty:2,unit:"cs",rayon:"epicerie"}],
+   ingredients:[{name:"Saumon",qty:2,unit:"",rayon:"boucherie"},{name:"Patate douce",qty:200,unit:"g",rayon:"fruits"},{name:"Haricots verts",qty:200,unit:"g",rayon:"fruits"},{name:"Sauce barbecue",qty:2,unit:"cs",rayon:"epicerie"},{name:"Paprika",qty:2,unit:"pincées",rayon:"chips"},{name:"Huile d'olive",qty:2,unit:"cs",rayon:"epicerie"}],
    steps:["Préchauffez le four à 190 °C.","Épluchez et coupez les patates douces en frites, déposez-les avec les haricots verts dans un plat allant au four.","Ajoutez un filet d'huile d'olive, du sel, du poivre et le paprika, mélangez et étalez sans superposer.","Ajoutez un petit fond d'eau et enfournez 30 minutes.","Sortez les légumes, déposez les pavés de saumon dans le plat, badigeonnez-les de sauce barbecue, salez et poivrez.","Enfournez encore 12 minutes, puis servez."]},
   {id:"saumon-et-brocoli-au-sirop-d-erable",name:"Saumon et brocoli au sirop d'érable",category:"Healthy",servings:2,minutes:25,inList:false,
-   ingredients:[{name:"Saumon",qty:2,unit:"",rayon:"boucherie"},{name:"Brocoli",qty:1,unit:"tête",rayon:"fruits"},{name:"Sirop d'érable",qty:2,unit:"cs",rayon:"sucre"},{name:"Sauce soja",qty:1,unit:"cs",rayon:"epicerie"},{name:"Ail",qty:1,unit:"gousse",rayon:"fruits"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
+   ingredients:[{name:"Saumon",qty:2,unit:"",rayon:"boucherie"},{name:"Brocoli",qty:1,unit:"tête",rayon:"fruits"},{name:"Sirop d'érable",qty:2,unit:"cs",rayon:"cereales"},{name:"Sauce soja",qty:1,unit:"cs",rayon:"monde"},{name:"Ail",qty:1,unit:"gousse",rayon:"fruits"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
    steps:["Préchauffez le four à 190 °C.","Coupez le brocoli en fleurettes, puis mélangez dans un bol le sirop d'érable, la sauce soja, l'ail haché et l'huile d'olive.","Badigeonnez les fleurettes de ce mélange, déposez-les dans un plat allant au four et enfournez 10 minutes.","Ajoutez les filets de saumon dans le plat, badigeonnez-les du reste du mélange et enfournez 10 à 12 minutes.","Servez le saumon et le brocoli avec un filet de sirop d'érable."]},
   {id:"saumon-roti-au-miel-et-riz",name:"Saumon rôti au miel et riz",category:"Healthy",servings:2,minutes:30,inList:false,
-   ingredients:[{name:"Saumon",qty:2,unit:"",rayon:"boucherie"},{name:"Riz",qty:150,unit:"g",rayon:"epicerie"},{name:"Miel",qty:2,unit:"cs",rayon:"sucre"},{name:"Sauce soja",qty:1,unit:"cs",rayon:"epicerie"},{name:"Citron",qty:0.5,unit:"",rayon:"fruits"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
+   ingredients:[{name:"Saumon",qty:2,unit:"",rayon:"boucherie"},{name:"Riz",qty:150,unit:"g",rayon:"riz"},{name:"Miel",qty:2,unit:"cs",rayon:"cereales"},{name:"Sauce soja",qty:1,unit:"cs",rayon:"monde"},{name:"Citron",qty:0.5,unit:"",rayon:"fruits"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
    steps:["Préchauffez le four à 180 °C.","Rincez le riz basmati et faites-le cuire selon les instructions du paquet.","Dans un bol, mélangez le miel, la sauce soja et le jus de citron, puis badigeonnez les filets de saumon.","Déposez-les dans un plat allant au four et enfournez 12 à 15 minutes.","Servez le saumon rôti avec le riz et un filet de sauce soja."]},
   {id:"spaghettis-bolognaise",name:"Spaghettis bolognaise",category:"Plaisir",servings:4,minutes:45,inList:false,
-   ingredients:[{name:"Spaghettis",qty:400,unit:"g",rayon:"epicerie"},{name:"Boeuf haché",qty:500,unit:"g",rayon:"boucherie"},{name:"Oignons",qty:1,unit:"",rayon:"fruits"},{name:"Ail",qty:2,unit:"gousses",rayon:"fruits"},{name:"Concentré de tomate",qty:1,unit:"cs",rayon:"epicerie"},{name:"Coulis de tomate",qty:50,unit:"cl",rayon:"epicerie"},{name:"Vin rouge",qty:10,unit:"cl",rayon:"boissons"},{name:"Huile d'olive",qty:2,unit:"cs",rayon:"epicerie"},{name:"Parmesan",qty:null,unit:"",rayon:"cremerie"}],
+   ingredients:[{name:"Spaghettis",qty:400,unit:"g",rayon:"pates"},{name:"Boeuf haché",qty:500,unit:"g",rayon:"boucherie"},{name:"Oignons",qty:1,unit:"",rayon:"fruits"},{name:"Ail",qty:2,unit:"gousses",rayon:"fruits"},{name:"Concentré de tomate",qty:1,unit:"cs",rayon:"pates"},{name:"Coulis de tomate",qty:50,unit:"cl",rayon:"pates"},{name:"Vin rouge",qty:10,unit:"cl",rayon:"boissons"},{name:"Huile d'olive",qty:2,unit:"cs",rayon:"epicerie"},{name:"Parmesan",qty:null,unit:"",rayon:"cremerie"}],
    steps:["Faites cuire les spaghettis dans une casserole d'eau bouillante salée, égouttez et réservez.","Épluchez et émincez finement l'oignon et l'ail.","Faites chauffer l'huile d'olive à feu moyen, ajoutez l'oignon et l'ail et faites revenir 2 à 3 minutes.","Ajoutez la viande hachée et faites-la dorer en l'émiettant bien.","Incorporez le concentré de tomate, versez le coulis et le vin rouge, salez et poivrez.","Laissez mijoter 20 à 25 minutes à feu doux en remuant de temps en temps.","Servez les spaghettis avec la sauce et parsemez de parmesan râpé."]},
   {id:"spaghettis-creme-de-courgette-jambon-de-bayonne",name:"Spaghettis crème de courgette & jambon de Bayonne",category:"Plaisir",servings:2,minutes:19,inList:false,
-   ingredients:[{name:"Spaghettis",qty:200,unit:"g",rayon:"epicerie"},{name:"Courgette",qty:200,unit:"g",rayon:"fruits"},{name:"Ricotta",qty:2,unit:"cs",rayon:"cremerie"},{name:"Jambon de Bayonne",qty:2,unit:"tranches",rayon:"boucherie"},{name:"Pesto",qty:2,unit:"cs",rayon:"epicerie"},{name:"Ail",qty:0.5,unit:"gousse",rayon:"fruits"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
+   ingredients:[{name:"Spaghettis",qty:200,unit:"g",rayon:"pates"},{name:"Courgette",qty:200,unit:"g",rayon:"fruits"},{name:"Ricotta",qty:2,unit:"cs",rayon:"cremerie"},{name:"Jambon de Bayonne",qty:2,unit:"tranches",rayon:"boucherie"},{name:"Pesto",qty:2,unit:"cs",rayon:"pates"},{name:"Ail",qty:0.5,unit:"gousse",rayon:"fruits"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
    steps:["Faites cuire les spaghettis dans une casserole d'eau bouillante salée, égouttez en réservant une louche d'eau de cuisson.","Lavez et coupez les courgettes en petits cubes, faites-les revenir 5 à 6 minutes à la poêle avec un filet d'huile d'olive, l'ail râpé, du sel et du poivre.","Mixez les courgettes cuites avec la ricotta, le pesto et une cuillère à soupe d'eau de cuisson.","Faites griller les tranches de jambon de Bayonne à la poêle jusqu'à ce qu'elles soient croustillantes.","Mélangez les spaghettis avec la crème de courgette et un peu d'eau de cuisson, servez avec le jambon croustillant en morceaux."]},
   {id:"tarte-au-chevre-et-aux-epinards",name:"Tarte au chèvre et aux épinards",category:"Healthy",servings:4,minutes:50,inList:false,
-   ingredients:[{name:"Pâte brisée",qty:1,unit:"rouleau",rayon:"epicerie"},{name:"Épinard",qty:300,unit:"g",rayon:"fruits"},{name:"Bûche de chèvre",qty:1,unit:"",rayon:"cremerie"},{name:"Œufs",qty:2,unit:"",rayon:"cremerie"},{name:"Crème fraîche",qty:20,unit:"cl",rayon:"cremerie"},{name:"Lait",qty:5,unit:"cl",rayon:"cremerie"}],
+   ingredients:[{name:"Pâte brisée",qty:1,unit:"rouleau",rayon:"cremerie"},{name:"Épinard",qty:300,unit:"g",rayon:"fruits"},{name:"Bûche de chèvre",qty:1,unit:"",rayon:"cremerie"},{name:"Œufs",qty:2,unit:"",rayon:"oeufs"},{name:"Crème fraîche",qty:20,unit:"cl",rayon:"cremerie"},{name:"Lait",qty:5,unit:"cl",rayon:"cremerie"}],
    steps:["Préchauffez le four à 180 °C.","Étalez la pâte brisée dans un moule à tarte et piquez le fond à la fourchette.","Lavez et faites revenir les épinards à la poêle avec un peu de beurre, égouttez-les bien.","Dans un saladier, mélangez les œufs, la crème fraîche et le lait, salez et poivrez.","Répartissez les épinards sur le fond de tarte, versez l'appareil, puis déposez les rondelles de chèvre.","Enfournez 30 minutes, jusqu'à ce que la tarte soit dorée, et laissez tiédir avant de servir."]},
   {id:"tarte-aux-poireaux-et-aux-lardons",name:"Tarte aux poireaux et aux lardons",category:"Healthy",servings:4,minutes:50,inList:false,
-   ingredients:[{name:"Pâte brisée",qty:1,unit:"rouleau",rayon:"epicerie"},{name:"Poireau",qty:3,unit:"",rayon:"fruits"},{name:"Lardons",qty:150,unit:"g",rayon:"boucherie"},{name:"Crème fraîche",qty:20,unit:"cl",rayon:"cremerie"},{name:"Œufs",qty:2,unit:"",rayon:"cremerie"},{name:"Gruyère",qty:50,unit:"g",rayon:"cremerie"},{name:"Beurre",qty:null,unit:"",rayon:"cremerie"}],
+   ingredients:[{name:"Pâte brisée",qty:1,unit:"rouleau",rayon:"cremerie"},{name:"Poireau",qty:3,unit:"",rayon:"fruits"},{name:"Lardons",qty:150,unit:"g",rayon:"boucherie"},{name:"Crème fraîche",qty:20,unit:"cl",rayon:"cremerie"},{name:"Œufs",qty:2,unit:"",rayon:"oeufs"},{name:"Gruyère",qty:50,unit:"g",rayon:"cremerie"},{name:"Beurre",qty:null,unit:"",rayon:"cremerie"}],
    steps:["Préchauffez le four à 200 °C.","Étalez la pâte brisée dans un moule à tarte et piquez le fond à la fourchette.","Lavez et émincez les poireaux, faites-les revenir 5 minutes à la poêle avec une noix de beurre, ajoutez les lardons et laissez dorer 5 minutes.","Dans un saladier, battez les œufs avec la crème fraîche, salez et poivrez.","Répartissez les poireaux et les lardons sur le fond de tarte, versez l'appareil et parsemez de gruyère râpé.","Enfournez 30 minutes, jusqu'à ce que la tarte soit dorée, et laissez tiédir avant de servir."]},
   {id:"tarte-tatin-revisitee",name:"Tarte tatin revisitée",category:"Dessert",servings:6,minutes:50,inList:false,
-   ingredients:[{name:"Farine",qty:230,unit:"g",rayon:"sucre"},{name:"Beurre pommade",qty:120,unit:"g",rayon:"cremerie"},{name:"Sucre glace",qty:130,unit:"g",rayon:"sucre"},{name:"Poudre d'amande",qty:75,unit:"g",rayon:"sucre"},{name:"Vanille liquide",qty:2,unit:"cs",rayon:"sucre"},{name:"Œufs",qty:2,unit:"",rayon:"cremerie"},{name:"Pommes",qty:4,unit:"",rayon:"fruits"},{name:"Beurre",qty:50,unit:"g",rayon:"cremerie"},{name:"Sucre",qty:175,unit:"g",rayon:"sucre"},{name:"Crème liquide",qty:400,unit:"g",rayon:"cremerie"},{name:"Mascarpone",qty:90,unit:"g",rayon:"cremerie"}],
+   ingredients:[{name:"Farine",qty:230,unit:"g",rayon:"sucre"},{name:"Beurre pommade",qty:120,unit:"g",rayon:"cremerie"},{name:"Sucre glace",qty:130,unit:"g",rayon:"sucre"},{name:"Poudre d'amande",qty:75,unit:"g",rayon:"sucre"},{name:"Vanille liquide",qty:2,unit:"cs",rayon:"sucre"},{name:"Œufs",qty:2,unit:"",rayon:"oeufs"},{name:"Pommes",qty:4,unit:"",rayon:"fruits"},{name:"Beurre",qty:50,unit:"g",rayon:"cremerie"},{name:"Sucre",qty:175,unit:"g",rayon:"sucre"},{name:"Crème liquide",qty:400,unit:"g",rayon:"cremerie"},{name:"Mascarpone",qty:90,unit:"g",rayon:"cremerie"}],
    steps:["Pâte sucrée — la veille, versez dans une cuve le sucre glace, le beurre pommade, la poudre d'amande, la vanille et le sel.","Mélangez à la feuille du batteur jusqu'à obtenir une texture crémeuse et homogène.","Ajoutez l'œuf, continuez à mélanger, puis tamisez la farine directement sur la préparation.","Mélangez sans travailler la pâte, formez une boule et frasez-la trois fois avec la paume de la main.","Étalez la pâte sur 5 mm entre deux feuilles de papier sulfurisé et réservez une nuit au frais.","Caramel au beurre salé — versez le sucre dans une casserole épaisse et laissez-le colorer sans y toucher jusqu'à une couleur ambrée, en faisant chauffer la crème à côté.","Hors du feu, versez progressivement la crème liquide sur le caramel : il va durcir, c'est normal.","À feu doux, laissez réduire quelques minutes jusqu'à dissolution complète du caramel, puis ajoutez le beurre demi-sel hors du feu.","Pommes — coupez-les en petits dés et faites-les revenir à feu doux dans une poêle avec une noix de beurre, à couvert, en mélangeant de temps en temps.","Une fois cuites, versez le caramel et laissez réduire quelques minutes, puis laissez refroidir.","Dacquoise — montez le blanc en neige, ajoutez le sucre semoule en plusieurs fois.","Tamisez la poudre d'amande et le sucre glace sur les blancs montés, mélangez délicatement et réservez en poche.","Montage — foncez les cercles beurrés avec le fond et la bandelette de pâte prédécoupés.","Enfournez les fonds 8 minutes à 180 °C, ajoutez la dacquoise et enfournez de nouveau 8 à 10 minutes.","Démoulez et laissez refroidir sur une grille.","Dans une cuve bien froide, montez en chantilly la crème liquide, le mascarpone, le sucre glace et la vanille, réservez en poche à douille.","Versez une cuillère à soupe de pommes caramélisées dans chaque fond, pochez la crème montée et décorez d'un peu de caramel."]},
   {id:"tartiflette-facile-et-rapide",name:"Tartiflette facile et rapide",category:"Plaisir",servings:4,minutes:40,inList:false,
    ingredients:[{name:"Pomme de terre",qty:1,unit:"kg",rayon:"fruits"},{name:"Lardons",qty:200,unit:"g",rayon:"boucherie"},{name:"Reblochon",qty:1,unit:"",rayon:"cremerie"},{name:"Oignons",qty:1,unit:"",rayon:"fruits"},{name:"Crème fraîche",qty:20,unit:"cl",rayon:"cremerie"},{name:"Vin blanc",qty:5,unit:"cl",rayon:"boissons"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
    steps:["Préchauffez le four à 200 °C.","Épluchez et coupez les pommes de terre en rondelles épaisses, faites-les cuire 10 minutes à l'eau bouillante salée, puis égouttez.","Émincez l'oignon et faites-le revenir avec les lardons et un filet d'huile d'olive jusqu'à ce qu'ils dorent.","Dans un plat à gratin, alternez une couche de pommes de terre et une couche de lardons et oignons.","Coupez le reblochon en deux dans le sens de l'épaisseur, posez-le sur le dessus, versez la crème fraîche et le vin blanc.","Enfournez 20 à 25 minutes, jusqu'à ce que le fromage soit fondu et gratiné."]},
   {id:"wok-de-legumes-poulet-sauce-cacahuete",name:"Wok de légumes, poulet & sauce cacahuète",category:"Healthy",servings:2,minutes:28,inList:false,
-   ingredients:[{name:"Filet de poulet",qty:2,unit:"",rayon:"boucherie"},{name:"Carottes",qty:2,unit:"",rayon:"fruits"},{name:"Courgette",qty:1,unit:"",rayon:"fruits"},{name:"Riz",qty:140,unit:"g",rayon:"epicerie"},{name:"Beurre de cacahuètes",qty:2,unit:"cs",rayon:"epicerie"},{name:"Sauce soja",qty:4,unit:"cs",rayon:"epicerie"},{name:"Ail",qty:1,unit:"gousse",rayon:"fruits"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
+   ingredients:[{name:"Filet de poulet",qty:2,unit:"",rayon:"boucherie"},{name:"Carottes",qty:2,unit:"",rayon:"fruits"},{name:"Courgette",qty:1,unit:"",rayon:"fruits"},{name:"Riz",qty:140,unit:"g",rayon:"riz"},{name:"Beurre de cacahuètes",qty:2,unit:"cs",rayon:"cereales"},{name:"Sauce soja",qty:4,unit:"cs",rayon:"monde"},{name:"Ail",qty:1,unit:"gousse",rayon:"fruits"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
    steps:["Faites cuire le riz selon les instructions du paquet, égouttez et réservez.","Épluchez et coupez les carottes et la courgette en lamelles à l'économe.","Faites-les revenir 5 à 6 minutes à la poêle avec un filet d'huile d'olive, du sel et du poivre, puis réservez.","Dans la même poêle, faites cuire le poulet coupé en tranches 5 à 6 minutes.","Mélangez le beurre de cacahuète, la sauce soja sucrée et l'ail râpé, délayez avec un peu d'eau.","Ajoutez les légumes et la sauce dans la poêle avec le poulet, mélangez bien.","Servez le riz avec le mélange poulet-légumes et parsemez de graines de sésame."]},
   {id:"wrap-facon-salade-cesar",name:"Wrap façon salade césar",category:"Plaisir",servings:2,minutes:15,inList:false,
-   ingredients:[{name:"Tortillas",qty:2,unit:"",rayon:"epicerie"},{name:"Blanc de poulet",qty:150,unit:"g",rayon:"boucherie"},{name:"Salade",qty:100,unit:"g",rayon:"fruits"},{name:"Parmesan",qty:30,unit:"g",rayon:"cremerie"},{name:"Sauce césar",qty:2,unit:"cs",rayon:"epicerie"},{name:"Croûtons",qty:20,unit:"g",rayon:"epicerie"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
+   ingredients:[{name:"Tortillas",qty:2,unit:"",rayon:"monde"},{name:"Blanc de poulet",qty:150,unit:"g",rayon:"boucherie"},{name:"Salade",qty:100,unit:"g",rayon:"fruits"},{name:"Parmesan",qty:30,unit:"g",rayon:"cremerie"},{name:"Sauce césar",qty:2,unit:"cs",rayon:"epicerie"},{name:"Croûtons",qty:20,unit:"g",rayon:"epicerie"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
    steps:["Coupez le poulet cuit en dés, lavez et séchez la salade romaine.","Étalez une tortilla sur une surface plane et répartissez la salade, les dés de poulet, les croûtons et le parmesan râpé.","Versez la sauce césar sur les ingrédients.","Repliez les côtés de la tortilla et roulez-la bien serrée.","Coupez le wrap en deux et servez immédiatement."]},
   {id:"wrap-poulet-avocat",name:"Wrap poulet avocat",category:"Plaisir",servings:2,minutes:15,inList:false,
-   ingredients:[{name:"Tortillas",qty:2,unit:"",rayon:"epicerie"},{name:"Filet de poulet",qty:1,unit:"",rayon:"boucherie"},{name:"Avocat",qty:1,unit:"",rayon:"fruits"},{name:"Crème fraîche",qty:2,unit:"cs",rayon:"cremerie"},{name:"Tomates",qty:4,unit:"",rayon:"fruits"},{name:"Salade",qty:null,unit:"",rayon:"fruits"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
+   ingredients:[{name:"Tortillas",qty:2,unit:"",rayon:"monde"},{name:"Filet de poulet",qty:1,unit:"",rayon:"boucherie"},{name:"Avocat",qty:1,unit:"",rayon:"fruits"},{name:"Crème fraîche",qty:2,unit:"cs",rayon:"cremerie"},{name:"Tomates",qty:4,unit:"",rayon:"fruits"},{name:"Salade",qty:null,unit:"",rayon:"fruits"},{name:"Huile d'olive",qty:1,unit:"cs",rayon:"epicerie"}],
    steps:["Coupez le filet de poulet en fines lamelles et faites-les revenir 3 minutes à la poêle chaude avec un filet d'huile d'olive, du sel et du poivre.","Pelez et coupez l'avocat en tranches, ajoutez un filet de jus de citron pour éviter qu'il ne noircisse.","Étalez le fromage fouetté sur une tortilla, ajoutez le poulet, l'avocat, les tomates cerise coupées en deux et quelques feuilles de salade.","Roulez la tortilla en serrant bien et coupez-la en deux.","Servez immédiatement pour profiter du croquant."]},
   {id:"poulet-tikka",name:"Poulet tikka",category:"Healthy",servings:4,minutes:30,inList:false,
-   ingredients:[{name:"Sauce tikka",qty:null,unit:"",rayon:"epicerie"},{name:"Filet de poulet",qty:null,unit:"",rayon:"boucherie"},{name:"Riz",qty:null,unit:"",rayon:"epicerie"},{name:"Brocoli",qty:null,unit:"",rayon:"fruits"},{name:"Épinard",qty:null,unit:"",rayon:"fruits"},{name:"Crème fraîche",qty:null,unit:"",rayon:"cremerie"}],
+   ingredients:[{name:"Sauce tikka",qty:null,unit:"",rayon:"monde"},{name:"Filet de poulet",qty:null,unit:"",rayon:"boucherie"},{name:"Riz",qty:null,unit:"",rayon:"riz"},{name:"Brocoli",qty:null,unit:"",rayon:"fruits"},{name:"Épinard",qty:null,unit:"",rayon:"fruits"},{name:"Crème fraîche",qty:null,unit:"",rayon:"cremerie"}],
    steps:["Dans une poêle moyenne à feu moyen-doux, chauffez l'huile et faites cuire les oignons jusqu'à ce qu'ils soient translucides et dorés.","Ajoutez le poulet et saisissez-le, puis incorporez la sauce tikka masala et les tomates.","Amenez à ébullition, couvrez et laissez mijoter 15 minutes, jusqu'à ce que le poulet soit bien cuit.","Pour plus d'onctuosité, ajoutez la crème épaisse au moment de servir.","Servez sur du riz, avec du pain naan, des chapatis ou des pappadums."]},
   {id:"curry-de-lentilles-cheese-naan",name:"Curry de lentilles & cheese naan",category:"Plat",servings:2,minutes:null,inList:false,
-   ingredients:[{name:"Pâte à pizza",qty:null,unit:"",rayon:"epicerie"},{name:"Vache qui rit",qty:null,unit:"",rayon:"cremerie"},{name:"Lentilles corail",qty:null,unit:"",rayon:"epicerie"},{name:"Coulis de tomate",qty:null,unit:"",rayon:"epicerie"},{name:"Épinard",qty:null,unit:"",rayon:"fruits"},{name:"Lait de coco",qty:null,unit:"",rayon:"epicerie"},{name:"Curry",qty:null,unit:"",rayon:"epicerie"}],
+   ingredients:[{name:"Pâte à pizza",qty:null,unit:"",rayon:"cremerie"},{name:"Vache qui rit",qty:null,unit:"",rayon:"cremerie"},{name:"Lentilles corail",qty:null,unit:"",rayon:"riz"},{name:"Coulis de tomate",qty:null,unit:"",rayon:"pates"},{name:"Épinard",qty:null,unit:"",rayon:"fruits"},{name:"Lait de coco",qty:null,unit:"",rayon:"monde"},{name:"Curry",qty:null,unit:"",rayon:"chips"}],
    steps:[]},
   {id:"enchiladas-au-poulet-vache-qui-rit",name:"Enchiladas au poulet & Vache qui rit",category:"Plat",servings:2,minutes:null,inList:false,
-   ingredients:[{name:"Tortillas",qty:null,unit:"",rayon:"epicerie"},{name:"Filet de poulet",qty:null,unit:"",rayon:"boucherie"},{name:"Oignons",qty:null,unit:"",rayon:"fruits"},{name:"Vache qui rit",qty:null,unit:"",rayon:"cremerie"},{name:"Coulis de tomate",qty:null,unit:"",rayon:"epicerie"},{name:"Mozzarella râpée",qty:null,unit:"",rayon:"cremerie"},{name:"Épices à fajitas",qty:null,unit:"",rayon:"epicerie"}],
+   ingredients:[{name:"Tortillas",qty:null,unit:"",rayon:"monde"},{name:"Filet de poulet",qty:null,unit:"",rayon:"boucherie"},{name:"Oignons",qty:null,unit:"",rayon:"fruits"},{name:"Vache qui rit",qty:null,unit:"",rayon:"cremerie"},{name:"Coulis de tomate",qty:null,unit:"",rayon:"pates"},{name:"Mozzarella râpée",qty:null,unit:"",rayon:"cremerie"},{name:"Épices à fajitas",qty:null,unit:"",rayon:"chips"}],
    steps:[]},
   {id:"escalope-de-dinde-tomates-cerises-ecrase-de-pommes-de-terre",name:"Escalope de dinde, tomates cerises & écrasé de pommes de terre",category:"Plat",servings:2,minutes:null,inList:false,
    ingredients:[{name:"Pomme de terre",qty:null,unit:"",rayon:"fruits"},{name:"Filet de poulet",qty:null,unit:"",rayon:"boucherie"},{name:"Épinard",qty:null,unit:"",rayon:"fruits"},{name:"Tomates",qty:null,unit:"",rayon:"fruits"},{name:"Parmesan",qty:null,unit:"",rayon:"cremerie"},{name:"Crème fraîche",qty:null,unit:"",rayon:"cremerie"}],
    steps:["Recette détaillée sur jow.fr : « escalope de dinde, tomates cerises et écrasé de pommes de terre »."]},
   {id:"tagliatelles-dinde-moutarde",name:"Tagliatelles dinde moutarde",category:"Plat",servings:2,minutes:null,inList:false,
-   ingredients:[{name:"Filet de poulet",qty:null,unit:"",rayon:"boucherie"},{name:"Moutarde",qty:null,unit:"",rayon:"epicerie"},{name:"Tagliatelles",qty:null,unit:"",rayon:"epicerie"},{name:"Champignons",qty:null,unit:"",rayon:"fruits"},{name:"Oignons",qty:null,unit:"",rayon:"fruits"},{name:"Crème fraîche",qty:null,unit:"",rayon:"cremerie"}],
+   ingredients:[{name:"Filet de poulet",qty:null,unit:"",rayon:"boucherie"},{name:"Moutarde",qty:null,unit:"",rayon:"epicerie"},{name:"Tagliatelles",qty:null,unit:"",rayon:"pates"},{name:"Champignons",qty:null,unit:"",rayon:"fruits"},{name:"Oignons",qty:null,unit:"",rayon:"fruits"},{name:"Crème fraîche",qty:null,unit:"",rayon:"cremerie"}],
    steps:[]},
   {id:"saumon-a-la-creme-et-aux-pommes-de-terre",name:"Saumon à la crème et aux pommes de terre",category:"Plat",servings:2,minutes:null,inList:false,
    ingredients:[{name:"Pomme de terre",qty:null,unit:"",rayon:"fruits"},{name:"Saumon",qty:null,unit:"",rayon:"boucherie"},{name:"Courgette",qty:null,unit:"",rayon:"fruits"},{name:"Yaourt grec",qty:null,unit:"",rayon:"cremerie"}],
    steps:[]},
   {id:"poulet-tandoori",name:"Poulet tandoori",category:"Plat",servings:2,minutes:null,inList:false,
-   ingredients:[{name:"Filet de poulet",qty:null,unit:"",rayon:"boucherie"},{name:"Yaourt grec",qty:null,unit:"",rayon:"cremerie"},{name:"Riz",qty:null,unit:"",rayon:"epicerie"},{name:"Ail",qty:null,unit:"",rayon:"fruits"},{name:"Épices tandoori",qty:null,unit:"",rayon:"epicerie"}],
+   ingredients:[{name:"Filet de poulet",qty:null,unit:"",rayon:"boucherie"},{name:"Yaourt grec",qty:null,unit:"",rayon:"cremerie"},{name:"Riz",qty:null,unit:"",rayon:"riz"},{name:"Ail",qty:null,unit:"",rayon:"fruits"},{name:"Épices tandoori",qty:null,unit:"",rayon:"chips"}],
    steps:[]},
   {id:"fajitas",name:"Fajitas",category:"Plat",servings:2,minutes:null,inList:false,
-   ingredients:[{name:"Poivron rouge",qty:null,unit:"",rayon:"fruits"},{name:"Oignons",qty:null,unit:"",rayon:"fruits"},{name:"Épices à fajitas",qty:null,unit:"",rayon:"epicerie"},{name:"Tortillas",qty:null,unit:"",rayon:"epicerie"},{name:"Crème fraîche",qty:null,unit:"",rayon:"cremerie"},{name:"Salade",qty:null,unit:"",rayon:"fruits"}],
+   ingredients:[{name:"Poivron rouge",qty:null,unit:"",rayon:"fruits"},{name:"Oignons",qty:null,unit:"",rayon:"fruits"},{name:"Épices à fajitas",qty:null,unit:"",rayon:"chips"},{name:"Tortillas",qty:null,unit:"",rayon:"monde"},{name:"Crème fraîche",qty:null,unit:"",rayon:"cremerie"},{name:"Salade",qty:null,unit:"",rayon:"fruits"}],
    steps:[]},
   {id:"feta-brocolis",name:"Feta brocolis",category:"Healthy",servings:2,minutes:20,inList:false,
-   ingredients:[{name:"Pâtes",qty:null,unit:"",rayon:"epicerie"},{name:"Feta",qty:null,unit:"",rayon:"cremerie"},{name:"Brocoli",qty:null,unit:"",rayon:"fruits"},{name:"Épinard",qty:null,unit:"",rayon:"fruits"},{name:"Jambon blanc",qty:null,unit:"",rayon:"boucherie"}],
+   ingredients:[{name:"Pâtes",qty:null,unit:"",rayon:"pates"},{name:"Feta",qty:null,unit:"",rayon:"cremerie"},{name:"Brocoli",qty:null,unit:"",rayon:"fruits"},{name:"Épinard",qty:null,unit:"",rayon:"fruits"},{name:"Jambon blanc",qty:null,unit:"",rayon:"boucherie"}],
    steps:[]},
   {id:"fondue-de-poireaux-et-riz",name:"Fondue de poireaux et riz",category:"Healthy",servings:2,minutes:20,inList:false,
-   ingredients:[{name:"Riz",qty:null,unit:"",rayon:"epicerie"},{name:"Poireau",qty:null,unit:"",rayon:"fruits"},{name:"Crème fraîche",qty:null,unit:"",rayon:"cremerie"},{name:"Moutarde",qty:null,unit:"",rayon:"epicerie"}],
+   ingredients:[{name:"Riz",qty:null,unit:"",rayon:"riz"},{name:"Poireau",qty:null,unit:"",rayon:"fruits"},{name:"Crème fraîche",qty:null,unit:"",rayon:"cremerie"},{name:"Moutarde",qty:null,unit:"",rayon:"epicerie"}],
    steps:[]},
   {id:"gnocchis-poeles",name:"Gnocchis poêlés",category:"Plaisir",servings:2,minutes:20,inList:false,
-   ingredients:[{name:"Gnocchis",qty:null,unit:"",rayon:"epicerie"}],
+   ingredients:[{name:"Gnocchis",qty:null,unit:"",rayon:"pates"}],
    steps:[]},
   {id:"hachis-parmentier",name:"Hachis parmentier",category:"Plat",servings:2,minutes:null,inList:false,
    ingredients:[{name:"Purée surgelée",qty:null,unit:"",rayon:"surgeles"},{name:"Boeuf haché",qty:null,unit:"",rayon:"boucherie"},{name:"Oignons",qty:null,unit:"",rayon:"fruits"},{name:"Beurre",qty:null,unit:"",rayon:"cremerie"},{name:"Gruyère",qty:null,unit:"",rayon:"cremerie"}],
    steps:[]},
   {id:"lasagnes-poireaux-champignons",name:"Lasagnes poireaux champignons",category:"Healthy",servings:2,minutes:40,inList:false,
-   ingredients:[{name:"Poireau",qty:null,unit:"",rayon:"fruits"},{name:"Champignons",qty:null,unit:"",rayon:"fruits"},{name:"Feuilles de lasagne",qty:null,unit:"",rayon:"epicerie"},{name:"Gruyère",qty:null,unit:"",rayon:"cremerie"},{name:"Crème fraîche",qty:null,unit:"",rayon:"cremerie"},{name:"Farine",qty:null,unit:"",rayon:"sucre"},{name:"Beurre",qty:null,unit:"",rayon:"cremerie"},{name:"Lait",qty:null,unit:"",rayon:"cremerie"},{name:"Carottes",qty:null,unit:"",rayon:"fruits"}],
+   ingredients:[{name:"Poireau",qty:null,unit:"",rayon:"fruits"},{name:"Champignons",qty:null,unit:"",rayon:"fruits"},{name:"Feuilles de lasagne",qty:null,unit:"",rayon:"pates"},{name:"Gruyère",qty:null,unit:"",rayon:"cremerie"},{name:"Crème fraîche",qty:null,unit:"",rayon:"cremerie"},{name:"Farine",qty:null,unit:"",rayon:"sucre"},{name:"Beurre",qty:null,unit:"",rayon:"cremerie"},{name:"Lait",qty:null,unit:"",rayon:"cremerie"},{name:"Carottes",qty:null,unit:"",rayon:"fruits"}],
    steps:["Recette détaillée sur cahierdegourmandises.fr : « lasagnes poireaux champignons »."]},
   {id:"pad-thai-au-poulet",name:"Pad thaï au poulet",category:"Plat",servings:2,minutes:null,inList:false,
-   ingredients:[{name:"Nouilles de riz",qty:null,unit:"",rayon:"epicerie"},{name:"Filet de poulet",qty:null,unit:"",rayon:"boucherie"},{name:"Ail",qty:null,unit:"",rayon:"fruits"},{name:"Sauce soja",qty:null,unit:"",rayon:"epicerie"},{name:"Beurre de cacahuètes",qty:null,unit:"",rayon:"epicerie"},{name:"Pousses de haricots",qty:null,unit:"",rayon:"epicerie"},{name:"Cacahuète",qty:null,unit:"",rayon:"epicerie"}],
+   ingredients:[{name:"Nouilles de riz",qty:null,unit:"",rayon:"monde"},{name:"Filet de poulet",qty:null,unit:"",rayon:"boucherie"},{name:"Ail",qty:null,unit:"",rayon:"fruits"},{name:"Sauce soja",qty:null,unit:"",rayon:"monde"},{name:"Beurre de cacahuètes",qty:null,unit:"",rayon:"cereales"},{name:"Pousses de haricots",qty:null,unit:"",rayon:"monde"},{name:"Cacahuète",qty:null,unit:"",rayon:"chips"}],
    steps:[]},
   {id:"rougail-saucisses",name:"Rougail saucisses",category:"Plat",servings:2,minutes:null,inList:false,
-   ingredients:[{name:"Tomates en conserve",qty:null,unit:"",rayon:"epicerie"},{name:"Saucisses",qty:null,unit:"",rayon:"boucherie"},{name:"Oignons",qty:null,unit:"",rayon:"fruits"},{name:"Ail",qty:null,unit:"",rayon:"fruits"},{name:"Carottes",qty:null,unit:"",rayon:"fruits"}],
+   ingredients:[{name:"Tomates en conserve",qty:null,unit:"",rayon:"conserves"},{name:"Saucisses",qty:null,unit:"",rayon:"boucherie"},{name:"Oignons",qty:null,unit:"",rayon:"fruits"},{name:"Ail",qty:null,unit:"",rayon:"fruits"},{name:"Carottes",qty:null,unit:"",rayon:"fruits"}],
    steps:[]}
 ];
 
@@ -1345,7 +1450,7 @@ const UI_TABS = ["recipes","list","week"];
 /* Cadrage de l'écran Recettes : tout le carnet, les seules recettes cochées
    aux courses, ou les seules recettes posées sur un repas de la semaine. */
 const SCOPES = ["", "list", "week"];
-let ui = {tab:"recipes", scroll:0, closed:[], scope:""};
+let ui = {tab:"recipes", scroll:0, closed:[], scope:"", parcours:false};
 
 function loadUI(){
   try{
@@ -1354,6 +1459,7 @@ function loadUI(){
       if(UI_TABS.indexOf(raw.tab) >= 0) ui.tab = raw.tab;
       if(typeof raw.scroll === "number" && raw.scroll >= 0) ui.scroll = raw.scroll;
       if(Array.isArray(raw.closed)) ui.closed = raw.closed.filter(x=>typeof x === "string");
+      if(raw.parcours === true) ui.parcours = true;
       if(SCOPES.indexOf(raw.scope) >= 0) ui.scope = raw.scope;
       /* Installations d'avant les deux pastilles : le booléen « semaine »
          d'alors devient le cadrage du même nom. */
@@ -1595,6 +1701,7 @@ function onStream(ev){
   const parts = String(msg.path).split("/").filter(Boolean);
   const data = msg.data;
   const touched = new Set();
+  let premier = false;
   if(parts.length === 0){
     const remote = data || {};
     for(const col of COLS){
@@ -1602,7 +1709,7 @@ function onStream(ev){
         if(mergeDoc(col, id, doc)) touched.add(col);
       }
     }
-    if(!firstSync){ firstSync = true; pushMissing(remote); }
+    if(!firstSync){ firstSync = true; premier = true; pushMissing(remote); }
   } else if(parts.length === 1){
     if(!COLS.includes(parts[0])) return;
     for(const [id, doc] of Object.entries(data || {})){
@@ -1613,6 +1720,7 @@ function onStream(ev){
     if(mergeDoc(parts[0], parts[1], data)) touched.add(parts[0]);
   }
   if(touched.size){ persist(); for(const col of touched) emit(col); }
+  if(premier) alignerParcours();
   if(touched.has("shopping")) tidyShopping();
   updateSync();
 }
@@ -3059,6 +3167,7 @@ document.addEventListener("input", ev=>{
   showTab(ui.tab);
   render();
   tidyShopping();
+  if(!cfg.url || !cfg.code) alignerParcours();
   restoreScroll();
   updateSync();
   connect();

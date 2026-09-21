@@ -16,7 +16,9 @@ Une page, aucune dépendance, aucun compte à créer pour s'en servir.
   repas ; l'une éteint l'autre, et chaque tuile dit combien de repas elle
   occupe. La flèche ↓ en haut avale une recette venue d'ailleurs : son texte
   brut, un lien d'import, ou du JSON.
-- **Courses** — triées par rayon dans l'ordre d'un parcours de magasin. La barre
+- **Courses** — triées par rayon dans l'ordre du parcours en magasin, des
+  produits ménagers aux boissons ; « Gérer les rayons », en bas de la liste,
+  retouche cet ordre, renomme un rayon ou en ajoute un. La barre
   de recherche comprend la quantité au vol (« 2 kg pommes de terre »), devine le
   rayon et propose les ingrédients déjà connus — dont les deux cent dix-neuf
   produits du carnet, chacun avec le rayon où il se trouve. Ce qu'on ajoute à

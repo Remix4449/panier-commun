@@ -151,6 +151,20 @@ souhaitable ici.
 - `PRODUITS` (les aliments du foyer, par rayon) alimente `PRODUIT_RAYON`,
   que `guessRayon()` consulte avant ses mots-clés : un ingrédient du carnet
   est rangé sans devinette.
+- `RAYONS_DEFAUT` donne l'ordre des sections de la liste de courses, et cet
+  ordre est celui du parcours en magasin du foyer — des produits ménagers
+  aux boissons. Les rayons y sont fins exprès (« Riz & féculents »,
+  « Produits du monde », « Œufs » séparés de la crémerie) : c'est ce qui
+  fait qu'on ne revient pas sur ses pas. La collection `rayons` ne garde
+  que les écarts, et un rang qui y traîne l'emporterait sur le tableau :
+  `alignerParcours()` efface une fois par téléphone ceux d'un ordre
+  précédent, puis `rangerSurLeNouveauParcours()` relit les lignes de
+  courses et les ingrédients du carnet — en laissant tranquilles le rayon
+  corrigé à la main que retient `pantry`, les rayons ajoutés par le foyer,
+  et les noms que `guessRayon()` ne sait pas placer. Le marqueur est
+  `ui.parcours`, dans `panier.ui.v1`. Un nouveau découpage des rayons
+  demandera le même couple : remettre `ui.parcours` à faux ne suffit pas,
+  il faut un nouveau marqueur.
 - Après toute modification de `index.html`, incrémente `CACHE` dans
   `sw.js` (`panier-v4` → `panier-v5`) : sans ça, les téléphones déjà
   installés gardent l'ancienne page dans le cache de la coquille.
