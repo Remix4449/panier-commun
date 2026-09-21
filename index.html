@@ -2127,8 +2127,8 @@ function renderHead(){
     const cochees = [...state.recipes.values()].filter(r=>r.inList).length;
     count.textContent = !n ? "" : (filtre ? vu + " sur " + n : n + (n>1 ? " recettes" : " recette"));
     acts.innerHTML = (cochees ? '<button class="btn btn-quiet" data-act="uncheck-all">Tout décocher</button>' : "") +
-      (cochees ? '<button class="btn" data-act="export-image" aria-label="Exporter les recettes cochées en image" ' +
-        'title="Exporter les recettes cochées en image">' + ICON_IMAGE + '</button>' : "") +
+      (cochees ? '<button class="btn" data-act="export-image" aria-label="Exporter la liste des repas en image" ' +
+        'title="Exporter la liste des repas en image">' + ICON_IMAGE + '</button>' : "") +
       '<button class="btn" data-act="import-recipe" aria-label="Importer une recette" title="Importer une recette collée">' +
         '<svg viewBox="0 0 24 24"><path d="M12 4v10"/><path d="M8.5 11l3.5 3.5L15.5 11"/><path d="M5 19h14"/></svg></button>' +
       '<button class="btn btn-primary" data-act="new-recipe"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Recette</button>';
@@ -2425,7 +2425,6 @@ function recipeSheetHTML(r){
     '<span class="n">' + esc(ing.name) + '</span></li>').join("");
   const steps = (r.steps||[]).filter(Boolean).map(s=>"<li>" + esc(s) + "</li>").join("");
   return '<div class="sheet-head"><h2>' + esc(r.name) + '</h2>' +
-    '<button class="sheet-close" data-act="export-one" data-id="' + esc(r.id) + '" aria-label="Exporter cette recette en image" title="Exporter en image">' + ICON_IMAGE + '</button>' +
     '<button class="sheet-close" data-act="edit-recipe" data-id="' + esc(r.id) + '" aria-label="Modifier la recette" title="Modifier">' +
       '<svg viewBox="0 0 24 24"><path d="M4 20h4L18.6 9.4a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M13.6 6.4l3 3"/></svg></button>' +
     CLOSE_BTN + '</div>' +
@@ -2668,9 +2667,10 @@ function openPicker(slotId){
 
 
 /* ------------------------- export en image -------------------------
-   Une affiche JPEG des recettes cochées : le papier chaud de l'écran,
-   lisible telle quelle dans une galerie photo ou un fil de messages.
-   Tout est dessiné sur un canvas, rien ne part vers un serveur.
+   La liste des repas cochés, en une image : les noms, rien d'autre. Le
+   papier chaud de l'écran, dessiné sur un canvas — rien ne part vers un
+   serveur. Ce n'est pas la fiche des recettes : ni ingrédients ni
+   préparation, c'est ce qu'on montre ou qu'on garde sous les yeux.
 
    La page se compose en deux passes sur les mêmes fonctions : la
    première mesure sans rien peindre — c'est elle qui donne la hauteur du
@@ -2683,22 +2683,20 @@ const EX_PIXELS_MAX = 13e6;   /* au-delà, l'encodage échoue sur certains tél�
 /* Le papier de l'affiche ne suit pas le thème du téléphone : une image
    partagée reste claire, chez soi comme chez l'autre. */
 const EX_PAPIER = {
-  fond:"#FBF5EC", halo:"243,232,216", carte:"#FFFCF7", carte2:"#F6EEE2",
+  fond:"#FBF5EC", halo:"243,232,216", carte:"#FFFCF7",
   encre:"#241C15", doux:"#7C6A58", trait:"#EBDFCE", traitFort:"#DCC9B0",
-  accent:"#2F6E4F", accentEncre:"#1E4E37", accentDoux:"#DFEFE2", chaud:"#C4552E"
+  accent:"#2F6E4F", chaud:"#C4552E"
 };
 const EX_TITRE = '"Bricolage Grotesque","Karla",system-ui,sans-serif';
 const EX_TEXTE = '"Karla",system-ui,-apple-system,sans-serif';
-const EX_CHIFFRE = '"DM Mono","Karla",ui-monospace,monospace';
 
 /* Les polices de l'écran ne sont pas forcément arrivées jusqu'au canvas :
    un canvas ne déclenche pas leur chargement, il faut le demander. Hors
    ligne, on dessine avec celles du téléphone — l'affiche tient debout. */
 async function exPolices(){
   if(!document.fonts || !document.fonts.load) return;
-  const faces = ['700 62px "Bricolage Grotesque"', '700 40px "Bricolage Grotesque"',
-                 '400 22px "Karla"', '700 20px "Karla"', 'italic 21px "Karla"',
-                 '500 21px "DM Mono"'];
+  const faces = ['700 62px "Bricolage Grotesque"', '700 34px "Bricolage Grotesque"',
+                 '400 23px "Karla"', '700 21px "Karla"'];
   try{ await Promise.all(faces.map(f => document.fonts.load(f, "Recettes 123"))); }catch(e){}
   try{ await document.fonts.ready; }catch(e){}
 }
@@ -2749,183 +2747,24 @@ function exCadre(ctx, x, y, w, h, r){
   ctx.arcTo(x, y, x + w, y, a);
   ctx.closePath();
 }
-function exLargeurPastille(ctx, texte){
-  ctx.font = '700 20px ' + EX_TEXTE;
-  return Math.round(ctx.measureText(texte).width) + 34;
-}
-function exPastille(ctx, texte, x, y, fond, encre, peindre){
-  const w = exLargeurPastille(ctx, texte);
+/* Une ligne de la liste : le pictogramme de la catégorie, le nom, et un
+   filet clair tant qu'une autre suit. Rend la hauteur occupée. */
+function exLigne(ctx, r, x, y, largeur, derniere, peindre){
+  const retrait = 62;
+  ctx.font = '700 34px ' + EX_TITRE;
+  const lignes = exLignes(ctx, r.name || "Sans nom", largeur - retrait);
+  const h = lignes.length * 46 + (derniere ? 14 : 34);
   if(peindre){
-    ctx.fillStyle = fond;
-    exCadre(ctx, x, y, w, 38, 19);
-    ctx.fill();
-    ctx.fillStyle = encre;
-    ctx.textBaseline = "middle";
-    ctx.fillText(texte, x + 17, y + 20);
-    ctx.textBaseline = "alphabetic";
-  }
-  return w;
-}
-/* Un intertitre en petites capitales, prolongé d'un filet clair. */
-function exSousTitre(ctx, texte, x, y, largeur, peindre){
-  ctx.font = '700 19px ' + EX_TEXTE;
-  if(peindre) ctx.fillStyle = EX_PAPIER.accent;
-  const w = exEspace(ctx, texte.toUpperCase(), x, y, 3, peindre);
-  if(peindre){
-    ctx.fillStyle = EX_PAPIER.accentDoux;
-    exCadre(ctx, x + w + 18, y - 8, Math.max(0, largeur - w - 18), 4, 2);
-    ctx.fill();
-  }
-}
-/* Une ligne d'ingrédient : la quantité calée à droite de sa gouttière,
-   le nom en face. Une ligne sur deux est posée sur un fond tendre, comme
-   dans la fiche de l'application. */
-function exIngredient(ctx, ing, facteur, rang, x, y, largeur, peindre){
-  const q = ing.qty != null ? fmtQty(ing.qty * facteur) + (ing.unit ? " " + ing.unit : "") : "—";
-  const gouttiere = Math.min(170, Math.round(largeur * 0.38));
-  ctx.font = '400 21px ' + EX_TEXTE;
-  const lignes = exLignes(ctx, ing.name, largeur - gouttiere - 8);
-  const h = Math.max(30, lignes.length * 30) + 14;
-  if(peindre){
-    if(rang % 2 === 0){
-      ctx.fillStyle = EX_PAPIER.carte2;
-      exCadre(ctx, x - 12, y, largeur + 24, h - 4, 11);
-      ctx.fill();
-    }
-    ctx.font = '500 20px ' + EX_CHIFFRE;
-    ctx.fillStyle = EX_PAPIER.accentEncre;
-    ctx.textAlign = "right";
-    ctx.fillText(q, x + gouttiere - 16, y + 27);
-    ctx.textAlign = "left";
-    ctx.font = '400 21px ' + EX_TEXTE;
+    ctx.font = '400 30px ' + EX_TEXTE;
+    ctx.fillStyle = EX_PAPIER.doux;
+    ctx.fillText(catPic(catOf(r)), x, y + 39);
+    ctx.font = '700 34px ' + EX_TITRE;
     ctx.fillStyle = EX_PAPIER.encre;
-    lignes.forEach((l, i) => ctx.fillText(l, x + gouttiere, y + 27 + i * 30));
-  }
-  return h;
-}
-/* Une étape, numérotée dans sa pastille. */
-function exEtape(ctx, n, texte, x, y, largeur, peindre){
-  const decalage = 54;
-  ctx.font = '400 21.5px ' + EX_TEXTE;
-  const lignes = exLignes(ctx, texte, largeur - decalage);
-  if(peindre){
-    ctx.fillStyle = EX_PAPIER.accentDoux;
-    ctx.beginPath();
-    ctx.arc(x + 17, y + 17, 17, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.font = '500 18px ' + EX_CHIFFRE;
-    ctx.fillStyle = EX_PAPIER.accentEncre;
-    ctx.textAlign = "center";
-    ctx.fillText(String(n), x + 17, y + 24);
-    ctx.textAlign = "left";
-    ctx.font = '400 21.5px ' + EX_TEXTE;
-    ctx.fillStyle = EX_PAPIER.encre;
-    lignes.forEach((l, i) => ctx.fillText(l, x + decalage, y + 24 + i * 31));
-  }
-  return Math.max(38, lignes.length * 31 + 4);
-}
-/* Les quantités de l'affiche sont celles qui sont parties aux courses :
-   une recette cochée pour six s'imprime pour six. */
-function exFacteur(r){ return (r.listServings || r.servings || 1) / (r.servings || 1); }
-
-/* Le dedans d'une carte ; rend la hauteur occupée. */
-function exContenu(ctx, r, rang, total, x, y, largeur, peindre){
-  const debut = y;
-  const facteur = exFacteur(r);
-  const parts = r.listServings || r.servings || null;
-
-  /* Seule sur l'affiche, la recette est déjà nommée en tête de page. */
-  if(total > 1){
-    ctx.font = '500 18px ' + EX_CHIFFRE;
-    if(peindre) ctx.fillStyle = EX_PAPIER.chaud;
-    exEspace(ctx, "RECETTE " + String(rang).padStart(2, "0"), x, y + 14, 3.2, peindre);
-    y += 38;
-    ctx.font = '700 40px ' + EX_TITRE;
-    const titre = exLignes(ctx, r.name || "Sans nom", largeur);
-    if(peindre){
-      ctx.fillStyle = EX_PAPIER.encre;
-      titre.forEach((l, i) => ctx.fillText(l, x, y + 34 + i * 46));
+    lignes.forEach((l, i) => ctx.fillText(l, x + retrait, y + 40 + i * 46));
+    if(!derniere){
+      ctx.fillStyle = EX_PAPIER.trait;
+      ctx.fillRect(x, y + h - 1, largeur, 1.5);
     }
-    y += (titre.length - 1) * 46 + 50;
-  }
-
-  const pastilles = [];
-  if(r.category) pastilles.push([catPic(catOf(r)) + " " + r.category, EX_PAPIER.accentDoux, EX_PAPIER.accentEncre]);
-  if(parts) pastilles.push([parts + (parts > 1 ? " personnes" : " personne"), EX_PAPIER.carte2, EX_PAPIER.doux]);
-  if(r.minutes) pastilles.push([r.minutes + " min", EX_PAPIER.carte2, EX_PAPIER.doux]);
-  if(pastilles.length){
-    let px = x;
-    for(const p of pastilles){
-      const w = exLargeurPastille(ctx, p[0]);
-      if(px > x && px + w > x + largeur){ px = x; y += 48; }
-      exPastille(ctx, p[0], px, y, p[1], p[2], peindre);
-      px += w + 10;
-    }
-    y += 38;
-  }
-
-  const ings = (r.ingredients || []).filter(i => i && i.name);
-  y += 42;
-  exSousTitre(ctx, "Ingrédients", x, y, largeur, peindre);
-  y += 24;
-  if(!ings.length){
-    ctx.font = 'italic 21px ' + EX_TEXTE;
-    if(peindre){
-      ctx.fillStyle = EX_PAPIER.doux;
-      ctx.fillText("Aucun ingrédient noté.", x, y + 24);
-    }
-    y += 34;
-  } else {
-    /* Au-delà de sept ingrédients, deux colonnes : l'affiche reste courte
-       et la liste se lit d'un coup d'œil. */
-    const deux = ings.length > 7 && largeur > 560;
-    const colL = deux ? (largeur - 52) / 2 : largeur;
-    const coupe = deux ? Math.ceil(ings.length / 2) : ings.length;
-    const colonnes = deux ? [ings.slice(0, coupe), ings.slice(coupe)] : [ings];
-    let haut = 0;
-    colonnes.forEach((liste, ci) => {
-      let cy = y;
-      const cx = x + ci * (colL + 52);
-      liste.forEach((ing, i) => { cy += exIngredient(ctx, ing, facteur, i, cx, cy, colL, peindre); });
-      haut = Math.max(haut, cy - y);
-    });
-    y += haut;
-  }
-
-  const etapes = (r.steps || []).filter(Boolean);
-  if(etapes.length){
-    y += 34;
-    exSousTitre(ctx, "Préparation", x, y, largeur, peindre);
-    y += 26;
-    etapes.forEach((s, i) => { y += exEtape(ctx, i + 1, s, x, y, largeur, peindre) + 12; });
-    y -= 12;
-  }
-  return y - debut;
-}
-/* Une carte de recette, fond et filet compris. Sa hauteur, mesurée à la
-   passe de mesure, est retenue : une affiche de quinze recettes se compose
-   deux fois moins longtemps. */
-let exPlan = [];
-function exCarte(ctx, r, rang, total, x, y, largeur, peindre){
-  const pad = 46;
-  if(exPlan[rang] == null){
-    exPlan[rang] = exContenu(ctx, r, rang, total, x + pad, y + pad, largeur - pad * 2, false) + pad * 2;
-  }
-  const h = exPlan[rang];
-  if(peindre){
-    ctx.save();
-    ctx.shadowColor = "rgba(70,48,24,.18)";
-    ctx.shadowBlur = 34;
-    ctx.shadowOffsetY = 14;
-    ctx.fillStyle = EX_PAPIER.carte;
-    exCadre(ctx, x, y, largeur, h, 30);
-    ctx.fill();
-    ctx.restore();
-    ctx.strokeStyle = EX_PAPIER.trait;
-    ctx.lineWidth = 1.5;
-    exCadre(ctx, x, y, largeur, h, 30);
-    ctx.stroke();
-    exContenu(ctx, r, rang, total, x + pad, y + pad, largeur - pad * 2, true);
   }
   return h;
 }
@@ -2935,11 +2774,11 @@ function exCarte(ctx, r, rang, total, x, y, largeur, peindre){
 function exFond(ctx, hauteur){
   ctx.fillStyle = EX_PAPIER.fond;
   ctx.fillRect(0, 0, EX_L, hauteur);
-  const halo = ctx.createLinearGradient(0, 0, 0, 560);
+  const halo = ctx.createLinearGradient(0, 0, 0, 520);
   halo.addColorStop(0, "rgba(" + EX_PAPIER.halo + ",1)");
   halo.addColorStop(1, "rgba(" + EX_PAPIER.halo + ",0)");
   ctx.fillStyle = halo;
-  ctx.fillRect(0, 0, EX_L, 560);
+  ctx.fillRect(0, 0, EX_L, 520);
   ctx.fillStyle = "rgba(124,106,88,.05)";
   const points = Math.min(9000, Math.round(EX_L * hauteur / 2600));
   for(let i = 0; i < points; i++) ctx.fillRect(Math.random() * EX_L, Math.random() * hauteur, 1.6, 1.6);
@@ -2962,20 +2801,17 @@ function exPage(ctx, recettes, peindre, hauteur){
   ctx.font = '700 21px ' + EX_TEXTE;
   if(peindre) ctx.fillStyle = EX_PAPIER.accent;
   exEspace(ctx, "PANIER COMMUN", EX_MARGE, y, 5, peindre);
-  y += 54;
-  const seule = recettes.length === 1 ? recettes[0] : null;
-  ctx.font = '700 ' + (seule ? 56 : 62) + 'px ' + EX_TITRE;
-  const titre = exLignes(ctx, seule ? (seule.name || "Recette") : "Nos recettes", col);
-  const interligne = seule ? 64 : 70;
+  y += 56;
+  ctx.font = '700 62px ' + EX_TITRE;
   if(peindre){
     ctx.fillStyle = EX_PAPIER.encre;
-    titre.forEach((l, i) => ctx.fillText(l, EX_MARGE, y + i * interligne));
+    ctx.fillText("Nos repas", EX_MARGE, y);
   }
-  y += (titre.length - 1) * interligne + 34;
+  y += 34;
   ctx.font = '400 23px ' + EX_TEXTE;
   if(peindre){
     ctx.fillStyle = EX_PAPIER.doux;
-    ctx.fillText((seule ? "" : recettes.length + " recettes · ") + exDate(), EX_MARGE, y);
+    ctx.fillText(recettes.length + (recettes.length > 1 ? " repas · " : " repas · ") + exDate(), EX_MARGE, y);
   }
   y += 26;
   if(peindre){
@@ -2984,8 +2820,33 @@ function exPage(ctx, recettes, peindre, hauteur){
     ctx.fill();
   }
   y += 54;
-  recettes.forEach((r, i) => { y += exCarte(ctx, r, i + 1, recettes.length, EX_MARGE, y, col, peindre) + 26; });
-  y += 20;
+
+  /* La liste, posée d'un bloc sur une carte. */
+  const pad = 44;
+  let h = pad * 2;
+  recettes.forEach((r, i) => {
+    h += exLigne(ctx, r, EX_MARGE + pad, 0, col - pad * 2, i === recettes.length - 1, false);
+  });
+  if(peindre){
+    ctx.save();
+    ctx.shadowColor = "rgba(70,48,24,.18)";
+    ctx.shadowBlur = 34;
+    ctx.shadowOffsetY = 14;
+    ctx.fillStyle = EX_PAPIER.carte;
+    exCadre(ctx, EX_MARGE, y, col, h, 30);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = EX_PAPIER.trait;
+    ctx.lineWidth = 1.5;
+    exCadre(ctx, EX_MARGE, y, col, h, 30);
+    ctx.stroke();
+    let ly = y + pad;
+    recettes.forEach((r, i) => {
+      ly += exLigne(ctx, r, EX_MARGE + pad, ly, col - pad * 2, i === recettes.length - 1, true);
+    });
+  }
+  y += h + 46;
+
   ctx.font = '400 19px ' + EX_TEXTE;
   if(peindre){
     ctx.fillStyle = EX_PAPIER.doux;
@@ -2996,7 +2857,6 @@ function exPage(ctx, recettes, peindre, hauteur){
   return y + 62;
 }
 function exCanvas(recettes){
-  exPlan = [];
   const mesure = document.createElement("canvas").getContext("2d");
   const hauteur = Math.round(exPage(mesure, recettes, false, 0));
   /* Un canvas trop grand n'est plus encodable : au-delà, on dessine la
@@ -3031,8 +2891,7 @@ async function exporterRecettes(recettes){
   if(!blob){ toast("L’image n’a pas pu être créée"); return; }
   exOublier();
   exUrl = URL.createObjectURL(blob);
-  exNom = "panier-" + (recettes.length === 1 ? slug(recettes[0].name) : recettes.length + "-recettes") +
-          "-" + new Date().toISOString().slice(0, 10) + ".jpg";
+  exNom = "panier-" + recettes.length + "-repas-" + new Date().toISOString().slice(0, 10) + ".jpg";
   try{
     const f = new File([blob], exNom, {type:"image/jpeg"});
     if(navigator.canShare && navigator.canShare({files:[f]})) exFichier = f;
@@ -3040,11 +2899,11 @@ async function exporterRecettes(recettes){
   openSheet(exFeuilleHTML(recettes, canvas, blob.size));
 }
 function exFeuilleHTML(recettes, canvas, poids){
-  const quoi = recettes.length === 1 ? recettes[0].name : recettes.length + " recettes";
-  return '<div class="sheet-head"><h2>Vos recettes en image</h2>' + CLOSE_BTN + '</div>' +
+  return '<div class="sheet-head"><h2>Vos repas en image</h2>' + CLOSE_BTN + '</div>' +
     '<div class="sheet-body">' +
-      '<div class="exportwrap"><img class="exportprev" src="' + exUrl + '" alt="Aperçu de l’affiche des recettes"></div>' +
-      '<p class="exportinfo">' + esc(quoi) + ' · ' + canvas.width + ' × ' + canvas.height + ' px · ' +
+      '<div class="exportwrap"><img class="exportprev" src="' + exUrl + '" alt="Aperçu de la liste des repas"></div>' +
+      '<p class="exportinfo">' + recettes.length + (recettes.length > 1 ? ' recettes' : ' recette') +
+        ' · ' + canvas.width + ' × ' + canvas.height + ' px · ' +
         Math.max(1, Math.round(poids / 1024)) + ' Ko</p>' +
       '<p class="note">' + (exFichier
         ? 'Partagez l’image telle quelle, ou enregistrez-la dans les photos du téléphone.'
@@ -3297,11 +3156,6 @@ document.addEventListener("click", async (ev)=>{
   }
   if(act === "open-recipe"){ openRecipe(id); return; }
   if(act === "export-image"){ await exporterRecettes(exChoisies()); return; }
-  if(act === "export-one"){
-    const r = state.recipes.get(id);
-    if(r) await exporterRecettes([r]);
-    return;
-  }
   /* Le partage part de la touche, sans rien calculer entre les deux :
      iOS n'ouvre la feuille de partage que dans la foulée du geste. */
   if(act === "share-export"){
