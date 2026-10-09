@@ -2678,12 +2678,13 @@ function openPicker(slotId){
    avancent des mêmes hauteurs, sans quoi l'affiche serait décalée.
 ------------------------------------------------------------------- */
 const EX_L = 1080;            /* largeur de l'affiche, en points de dessin */
-const EX_MARGE = 66;
+const EX_MARGE = 104;        /* assez large pour une pastille de chaque côté */
+const EX_HAUT_CARTE = 274;    /* le haut de la carte, sous l'en-tête */
 const EX_PIXELS_MAX = 13e6;   /* au-delà, l'encodage échoue sur certains téléphones */
 /* Le papier de l'affiche ne suit pas le thème du téléphone : une image
    partagée reste claire, chez soi comme chez l'autre. */
 const EX_PAPIER = {
-  fond:"#FBF5EC", halo:"243,232,216", carte:"#FFFCF7",
+  fond:"#FFF8EE", halo:"255,236,214", carte:"#FFFCF7",
   encre:"#241C15", doux:"#7C6A58", trait:"#EBDFCE", traitFort:"#DCC9B0",
   accent:"#2F6E4F", chaud:"#C4552E"
 };
@@ -2768,10 +2769,74 @@ function exLigne(ctx, r, x, y, largeur, derniere, peindre){
   }
   return h;
 }
-/* Le papier : fond chaud, halo en tête, grain léger et filet de cadre.
-   Le grain n'est pas qu'une coquetterie — sans lui, les grands aplats
-   d'un JPEG se voient par bandes. */
-function exFond(ctx, hauteur){
+/* Les pastilles semées sur le papier : un aliment sur un rond de couleur,
+   chacun penché à sa façon, posées là où il n'y a rien à lire — autour du
+   titre, de la carte et de la signature, jamais dessous. Elles sont tirées
+   au hasard puis gardées seulement si elles ont la place ; le tirage part
+   toujours de la même graine, rien ne bouge d'un export à l'autre. */
+const EX_LOGOS = ["🥕","🍅","🥖","🧀","🥑","🍋","🍓","🥦","🍝","🥐",
+                  "🍎","🌽","🍆","🧄","🍇","🥚","🍕","🫑","🍒","🥗"];
+const EX_PASTILLES = ["#FFD3BF","#FCE3A0","#CFEBC1","#F8CAD6","#CFE2F5","#E3D5F2","#FBD9AE"];
+function exHasard(graine){
+  let a = graine >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+/* `reserve` : les rectangles [x, y, l, h] où rien ne se pose. */
+function exLogos(ctx, hauteur, reserve){
+  const hasard = exHasard(4449);
+  const posees = [];
+  const libre = (cx, cy, r) => {
+    for(const [x, y, l, h] of reserve){
+      const dx = Math.max(x - cx, 0, cx - x - l), dy = Math.max(y - cy, 0, cy - y - h);
+      if(dx * dx + dy * dy < (r + 8) * (r + 8)) return false;
+    }
+    return posees.every(p => Math.hypot(p.cx - cx, p.cy - cy) > p.r + r + 12);
+  };
+  const essais = Math.round(EX_L * hauteur / 400);
+  for(let i = 0; i < essais; i++){
+    const r = 25 + hasard() * 13;
+    const cx = r + 10 + hasard() * (EX_L - 2 * r - 20);
+    const cy = r + 10 + hasard() * (hauteur - 2 * r - 20);
+    const angle = (hasard() - .5) * .7;
+    if(libre(cx, cy, r)) posees.push({cx, cy, r, angle});
+  }
+  /* Les aliments défilent dans l'ordre, les couleurs aussi, décalées :
+     deux voisines ne se ressemblent presque jamais. */
+  posees.sort((a, b) => a.cy - b.cy || a.cx - b.cx);
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  posees.forEach((p, i) => {
+    ctx.save();
+    ctx.translate(p.cx, p.cy);
+    ctx.rotate(p.angle);
+    ctx.shadowColor = "rgba(70,48,24,.14)";
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 4;
+    ctx.fillStyle = EX_PASTILLES[(i * 3) % EX_PASTILLES.length];
+    ctx.beginPath();
+    ctx.arc(0, 0, p.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowColor = "transparent";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#FFFFFF";
+    ctx.stroke();
+    ctx.font = Math.round(p.r * 1.05) + 'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+    ctx.fillStyle = EX_PAPIER.encre;
+    ctx.fillText(EX_LOGOS[(i * 7) % EX_LOGOS.length], 0, p.r * .06);
+    ctx.restore();
+  });
+  ctx.restore();
+}
+/* Le papier : fond chaud, halo en tête, grain léger, filet de cadre, et
+   les pastilles par-dessus, comme des gommettes. Le grain n'est pas qu'une coquetterie — sans lui, les
+   grands aplats d'un JPEG se voient par bandes. */
+function exFond(ctx, hauteur, reserve){
   ctx.fillStyle = EX_PAPIER.fond;
   ctx.fillRect(0, 0, EX_L, hauteur);
   const halo = ctx.createLinearGradient(0, 0, 0, 520);
@@ -2786,6 +2851,7 @@ function exFond(ctx, hauteur){
   ctx.lineWidth = 2;
   exCadre(ctx, 26, 26, EX_L - 52, hauteur - 52, 34);
   ctx.stroke();
+  exLogos(ctx, hauteur, reserve);
 }
 function exDate(){
   try{ return new Date().toLocaleDateString("fr-FR", {day:"numeric", month:"long", year:"numeric"}); }
@@ -2794,7 +2860,18 @@ function exDate(){
 /* La page entière ; rend sa hauteur. */
 function exPage(ctx, recettes, peindre, hauteur){
   const col = EX_L - EX_MARGE * 2;
-  if(peindre) exFond(ctx, hauteur);
+  /* La carte est mesurée d'abord : les pastilles du fond doivent savoir
+     où elle s'arrête. */
+  const pad = 44;
+  let h = pad * 2;
+  recettes.forEach((r, i) => {
+    h += exLigne(ctx, r, EX_MARGE + pad, 0, col - pad * 2, i === recettes.length - 1, false);
+  });
+  if(peindre) exFond(ctx, hauteur, [
+    [EX_MARGE - 10, 70, 560, 170],                  /* le titre */
+    [EX_MARGE, EX_HAUT_CARTE, col, h + 20],         /* la carte et son ombre */
+    [EX_L / 2 - 200, EX_HAUT_CARTE + h + 18, 400, 40] /* la signature */
+  ]);
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
   let y = 104;
@@ -2822,11 +2899,6 @@ function exPage(ctx, recettes, peindre, hauteur){
   y += 54;
 
   /* La liste, posée d'un bloc sur une carte. */
-  const pad = 44;
-  let h = pad * 2;
-  recettes.forEach((r, i) => {
-    h += exLigne(ctx, r, EX_MARGE + pad, 0, col - pad * 2, i === recettes.length - 1, false);
-  });
   if(peindre){
     ctx.save();
     ctx.shadowColor = "rgba(70,48,24,.18)";

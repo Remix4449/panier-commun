@@ -158,8 +158,10 @@ souhaitable ici.
   se touchent pas sans y penser : le papier reste clair quel que soit le
   thème du téléphone — une image partagée se lit chez l'autre —, et le
   partage part de la touche sans rien calculer entre les deux, seule façon
-  qu'iOS ouvre sa feuille. Le `CACHE` de `sw.js` est à incrémenter comme pour
-  tout le reste.
+  qu'iOS ouvre sa feuille. Le fond est semé de pastilles d'aliments
+  (`exLogos()`), posées seulement hors du titre, de la carte et de la
+  signature, toujours tirées de la même graine. Le `CACHE` de `sw.js` est à
+  incrémenter comme pour tout le reste.
 - `PRODUITS` (les aliments du foyer, par rayon) alimente `PRODUIT_RAYON`,
   que `guessRayon()` consulte avant ses mots-clés : un ingrédient du carnet
   est rangé sans devinette.
