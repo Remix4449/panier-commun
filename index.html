@@ -380,6 +380,7 @@ button{cursor:pointer;background:none;border:none;padding:0}
 .item[data-done="1"] .qty{opacity:.45}
 .editor{display:none;padding:0 14px 14px 53px;gap:8px;flex-wrap:wrap;align-items:center}
 .item.editing .editor{display:flex}
+.editor + .editor{border-top:1px dashed var(--line);padding-top:12px}
 .item.editing{background:var(--surface-2)}
 .editor input[type="number"]{width:78px}
 .editor input,.editor select{
@@ -1819,6 +1820,28 @@ function isManual(it){
 function lostRecipes(it){
   return Object.keys(it.sources||{}).filter(rid => !state.recipes.get(rid)).length;
 }
+/* L'éditeur d'une ligne de courses : sa provenance, sa quantité, son unité,
+   son rayon. Une rangée qui réunit plusieurs unités en montre un par ligne. */
+function editorHTML(it, defs, byKey){
+  const total = itemTotal(it);
+  const parts = itemParts(it);
+  const rk = byKey.has(it.rayon) ? it.rayon : "divers";
+  return '<div class="editor">' +
+    (parts.length ? '<div class="from">' +
+      '<span class="from-lab">Prévu avec</span><ul>' +
+      parts.map(p => '<li><span class="who">' + esc(p.who) + '</span>' +
+        (p.qty!=null ? '<span class="howmuch">' + esc(fmtQty(p.qty) + (it.unit ? " " + it.unit : "")) + '</span>' : "") +
+      '</li>').join("") + '</ul>' +
+      (hasOverride(it) ? '<p class="note">Quantité réécrite à la main : elle remplace ce total. Videz le champ pour la rendre au calcul.</p>' : "") +
+    '</div>' : "") +
+    '<input type="number" step="any" min="0" name="qty" value="' + (total!=null?esc(total):"") + '" data-id="' + esc(it.id) + '" aria-label="Quantité" placeholder="qté">' +
+    '<input name="unit" value="' + esc(it.unit||"") + '" data-id="' + esc(it.id) + '" aria-label="Unité" placeholder="unité">' +
+    '<select name="rayon" data-id="' + esc(it.id) + '" aria-label="Rayon">' +
+      defs.map(d=>'<option value="' + esc(d.key) + '"' + (d.key===rk?" selected":"") + '>' + esc(d.name) + '</option>').join("") +
+    '</select>' +
+    '<button class="rm" data-act="remove-item" data-id="' + esc(it.id) + '">Supprimer</button>' +
+  '</div>';
+}
 function itemFrom(it){
   const names = Object.keys(it.sources||{}).map(rid=>{
     const r = state.recipes.get(rid); return r ? r.name : null;
@@ -2327,43 +2350,47 @@ function renderList(){
   for(const def of defs){
     const list = byRayon.get(def.key);
     if(!list) continue;
-    list.sort((a,b)=> (a.done?1:0)-(b.done?1:0) || (a.name||"").localeCompare(b.name||"","fr"));
-    const left = list.filter(i=>!i.done).length;
+    /* Un même article en plusieurs unités — 50 cl, 4 cs et un pot de crème
+       fraîche — reste plusieurs lignes en base, puisqu'on ne les additionne
+       pas, mais s'affiche sur une seule rangée : une case, un nom, les
+       quantités côte à côte. L'éditeur montre alors chaque ligne. */
+    const parNom = new Map();
+    for(const it of list){
+      const nom = normName(it.name);
+      if(!parNom.has(nom)) parNom.set(nom, []);
+      parNom.get(nom).push(it);
+    }
+    const rangs = [...parNom.values()].map(lignes => {
+      lignes.sort((a,b)=> a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+      return {lignes, done:lignes.every(i => i.done), name:lignes[0].name};
+    });
+    rangs.sort((a,b)=> (a.done?1:0)-(b.done?1:0) || (a.name||"").localeCompare(b.name||"","fr"));
+    const faits = rangs.filter(g => g.done).length;
     html += '<section class="aisle" data-swatch="' + esc(def.swatch) + '">' +
             '<div class="aisle-head"><span class="pic" aria-hidden="true">' + esc(def.pic || "") + '</span>' +
             '<h3>' + esc(def.name) + '</h3><span class="rule"></span>' +
-            '<span class="n">' + left + "/" + list.length + '</span></div><ul class="items">';
-    for(const it of list){
-      const total = itemTotal(it);
-      const main = isManual(it);
-      const from = itemFrom(it);
-      const parts = itemParts(it);
-      const rk = byKey.has(it.rayon) ? it.rayon : "divers";
-      html += '<li class="item' + (state.editing === it.id ? " editing" : "") + '" data-done="' + (it.done?1:0) + '" data-id="' + esc(it.id) + '">' +
+            '<span class="n" title="Articles cochés">' + faits + "/" + rangs.length + '</span></div><ul class="items">';
+    for(const g of rangs){
+      const it = g.lignes[0];
+      const ids = g.lignes.map(l => l.id);
+      const main = g.lignes.some(isManual);
+      const from = [...new Set(g.lignes.map(itemFrom).join(" · ").split(" · ").filter(Boolean))].join(" · ");
+      const qtys = g.lignes.map(l => {
+        const t = itemTotal(l);
+        return t!=null ? fmtQty(t) + (l.unit ? " " + l.unit : "") : "";
+      }).filter(Boolean);
+      html += '<li class="item' + (ids.indexOf(state.editing) >= 0 ? " editing" : "") + '" data-done="' + (g.done?1:0) + '" data-id="' + esc(it.id) + '">' +
         '<div class="item-row">' +
-          '<button class="tick" data-act="tick" data-id="' + esc(it.id) + '" aria-pressed="' + (it.done?"true":"false") + '" aria-label="Cocher ' + esc(it.name) + '">' + ICON_CHECK + '</button>' +
+          '<button class="tick" data-act="tick" data-id="' + esc(ids.join(" ")) + '" aria-pressed="' + (g.done?"true":"false") + '" aria-label="Cocher ' + esc(it.name) + '">' + ICON_CHECK + '</button>' +
           '<button class="item-body" data-act="edit-item" data-id="' + esc(it.id) + '">' +
             '<span class="item-name">' + esc(it.name) + '</span>' +
             (from ? '<span class="item-from">' + esc(from) + '</span>' : "") +
           '</button>' +
           (main ? '<span class="item-hand" title="Ajouté à la main" aria-label="Ajouté à la main" role="img">👋</span>' : "") +
-          (total!=null ? '<span class="qty">' + esc(fmtQty(total) + (it.unit ? " " + it.unit : "")) + '</span>' : "") +
+          (qtys.length ? '<span class="qty">' + esc(qtys.join(" + ")) + '</span>' : "") +
         '</div>' +
-        '<div class="editor">' +
-          (parts.length ? '<div class="from">' +
-            '<span class="from-lab">Prévu avec</span><ul>' +
-            parts.map(p => '<li><span class="who">' + esc(p.who) + '</span>' +
-              (p.qty!=null ? '<span class="howmuch">' + esc(fmtQty(p.qty) + (it.unit ? " " + it.unit : "")) + '</span>' : "") +
-            '</li>').join("") + '</ul>' +
-            (hasOverride(it) ? '<p class="note">Quantité réécrite à la main : elle remplace ce total. Videz le champ pour la rendre au calcul.</p>' : "") +
-          '</div>' : "") +
-          '<input type="number" step="any" min="0" name="qty" value="' + (total!=null?esc(total):"") + '" data-id="' + esc(it.id) + '" aria-label="Quantité" placeholder="qté">' +
-          '<input name="unit" value="' + esc(it.unit||"") + '" data-id="' + esc(it.id) + '" aria-label="Unité" placeholder="unité">' +
-          '<select name="rayon" data-id="' + esc(it.id) + '" aria-label="Rayon">' +
-            defs.map(d=>'<option value="' + esc(d.key) + '"' + (d.key===rk?" selected":"") + '>' + esc(d.name) + '</option>').join("") +
-          '</select>' +
-          '<button class="rm" data-act="remove-item" data-id="' + esc(it.id) + '">Supprimer</button>' +
-        '</div></li>';
+        g.lignes.map(l => editorHTML(l, defs, byKey)).join("") +
+        '</li>';
     }
     html += "</ul></section>";
   }
@@ -3268,8 +3295,11 @@ document.addEventListener("click", async (ev)=>{
   }
 
   if(act === "tick"){
-    const it = state.shopping.get(id); if(!it) return;
-    await save("shopping", id, Object.assign({}, it, {done:!it.done}));
+    /* Une rangée peut porter plusieurs lignes : on les coche ensemble. */
+    const lignes = id.split(" ").map(i => state.shopping.get(i)).filter(Boolean);
+    if(!lignes.length) return;
+    const done = !lignes.every(l => l.done);
+    for(const l of lignes) await save("shopping", l.id, Object.assign({}, l, {done}));
     return;
   }
   if(act === "edit-item"){
