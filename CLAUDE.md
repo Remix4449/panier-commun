@@ -126,6 +126,9 @@ souhaitable ici.
   `itemFrom()` / `itemParts()` affichent « Recette retirée » pour les
   `sources` dont la recette n'est plus au carnet — lignes d'avant, ou
   suppression pas encore reçue de l'autre téléphone.
+- Glisser une tuile de recette vers la droite (« Rebelotte 🃏 ») rappelle
+  `recipeToList()` à la portion retenue : lignes recréées ou décochées, sans
+  doublon. Le clic qui suit le glissé est avalé pour ne pas ouvrir la fiche.
 - `openPicker()` ne propose que les recettes cochées (`inList`), plus celle
   déjà posée sur le créneau — sans quoi la feuille ne montrerait pas ce que
   le repas porte quand la recette a été décochée depuis.
